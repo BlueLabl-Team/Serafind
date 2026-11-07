@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 
 pub use config::{
     Appearance, Backend, BarSettings, Behavior, Chips, Config, Escape, IconSet, IndexSettings, Layout,
-    ModeSelector, Rows, Screen, Shortcut, Window,
+    ModeSelector, Rows, Screen, Shortcut, Tray, Window,
 };
 pub use error::SettingsError;
 pub use keys::{Key, Keys};

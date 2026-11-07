@@ -52,6 +52,16 @@ pub struct Strings {
     pub input_label: &'static str,
     /// Accessibility label of the mode selector.
     pub mode_label: &'static str,
+    /// Notification area: tooltip of the icon.
+    pub tray_tooltip: &'static str,
+    /// Notification area menu: open the bar.
+    pub tray_open: &'static str,
+    /// Notification area menu: index again.
+    pub tray_reindex: &'static str,
+    /// Notification area menu: open the settings folder.
+    pub tray_settings: &'static str,
+    /// Notification area menu: stop Serafind.
+    pub tray_quit: &'static str,
 }
 
 impl Strings {
@@ -79,6 +89,11 @@ impl Strings {
         chip_not: "Not",
         input_label: "Search",
         mode_label: "Mode",
+        tray_tooltip: "Serafind: click to search",
+        tray_open: "Open Serafind",
+        tray_reindex: "Index again",
+        tray_settings: "Settings",
+        tray_quit: "Quit Serafind",
     };
 
     /// The name of a mode.

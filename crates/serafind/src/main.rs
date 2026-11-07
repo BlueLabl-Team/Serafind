@@ -10,10 +10,12 @@ mod daemon;
 mod desktop;
 mod format;
 mod icons;
+mod logo;
 mod search;
 mod shortcut;
 mod strings;
 mod style;
+mod tray;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -129,8 +131,12 @@ fn run(command: Command, settings_dir: Option<PathBuf>, home: PathBuf) -> ExitCo
                 let _ = client.call(&Request::Quit);
             }
             match desktop::uninstall_desktop_file() {
-                Ok(Some(path)) => println!("Removed {}.", path.display()),
-                Ok(None) => println!("No desktop entry to remove."),
+                Ok(removed) if removed.is_empty() => println!("No desktop entry to remove."),
+                Ok(removed) => {
+                    for path in removed {
+                        println!("Removed {}.", path.display());
+                    }
+                }
                 Err(error) => {
                     eprintln!("serafind: {error}");
                     return ExitCode::FAILURE;
@@ -216,6 +222,11 @@ fn send(client: &mut Client, request: &Request) -> ExitCode {
                 (_, Some(problem)) => println!("Shortcut: none: {problem}."),
                 (Some(shortcut), None) => println!("Shortcut: {shortcut}."),
                 (None, None) => println!("Shortcut: being set up."),
+            }
+            match (status.tray_enabled, &status.tray_problem) {
+                (false, _) => println!("Tray icon: off ([tray] enabled = false)."),
+                (true, Some(problem)) => println!("Tray icon: not shown: {problem}."),
+                (true, None) => println!("Tray icon: shown."),
             }
             ExitCode::SUCCESS
         }
@@ -351,6 +362,7 @@ fn run_bar(settings_dir: Option<PathBuf>, home: PathBuf) -> ExitCode {
     let viewport = egui::ViewportBuilder::default()
         .with_title("Serafind")
         .with_app_id(desktop::APP_ID)
+        .with_icon(window_icon())
         .with_decorations(false)
         .with_transparent(true)
         // Not "false": on Wayland that freezes the size at creation and the bar could not grow.
@@ -422,3 +434,14 @@ fn force_x11_if_asked(options: &mut eframe::NativeOptions, backend: Backend) {
 
 #[cfg(not(target_os = "linux"))]
 fn force_x11_if_asked(_options: &mut eframe::NativeOptions, _backend: Backend) {}
+
+/// The logo as the window icon (X11 and Windows; on Wayland the desktop takes it from the
+/// `.desktop` file).
+fn window_icon() -> egui::IconData {
+    let logo = logo::decode(logo::PNG_64);
+    egui::IconData {
+        rgba: logo.rgba,
+        width: logo.width,
+        height: logo.height,
+    }
+}
