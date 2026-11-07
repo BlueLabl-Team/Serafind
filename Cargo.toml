@@ -15,12 +15,15 @@ serafind-core = { path = "crates/serafind-core" }
 serafind-index = { path = "crates/serafind-index" }
 
 nucleo-matcher = "0.3"
+ignore = "0.4"
+hashbrown = "0.17"
 
 # Tests
 rstest = "0.28"
 proptest = "1.12"
 insta = "1.49"
 assert_fs = "1.1"
+divan = "0.1"
 
 [workspace.lints.rust]
 unsafe_code = "deny"
