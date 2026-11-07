@@ -71,7 +71,7 @@ fn main() -> ExitCode {
         .with_resizable(false)
         .with_always_on_top()
         .with_taskbar(false)
-        .with_visible(false)
+        .with_visible(true)
         .with_inner_size([width, 80.0]);
     let mut options = eframe::NativeOptions {
         viewport,

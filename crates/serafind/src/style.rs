@@ -6,7 +6,7 @@ use std::sync::Arc;
 use eframe::egui::{
     self, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Stroke, TextStyle,
 };
-use serafind_settings::{Color, Theme};
+use serafind_settings::{Color, Theme, ThemeMode};
 
 /// Family name of the semi-bold text font (names, matched letters).
 pub const BOLD: &str = "serafind-bold";
@@ -154,7 +154,7 @@ fn installed_font_file(_family: &str) -> Option<std::path::PathBuf> {
 /// Applies a theme's colors, sizes and shapes to egui.
 pub fn apply(ctx: &egui::Context, theme: &Theme) {
     let colors = &theme.colors;
-    let dark = luminance(colors.background) < 0.5;
+    let dark = theme.mode == ThemeMode::Dark;
     let size = f32::from(theme.font.size);
     let radius = u8::try_from(theme.shape.radius).unwrap_or(u8::MAX);
 
@@ -163,15 +163,15 @@ pub fn apply(ctx: &egui::Context, theme: &Theme) {
     } else {
         egui::Visuals::light()
     };
-    visuals.override_text_color = Some(color(colors.text));
-    visuals.panel_fill = color(colors.background);
-    visuals.window_fill = color(colors.background);
+    visuals.override_text_color = Some(color(colors.text_primary));
+    visuals.panel_fill = color(colors.surface_elevated);
+    visuals.window_fill = color(colors.surface_elevated);
     visuals.extreme_bg_color = color(colors.surface);
     visuals.faint_bg_color = color(colors.surface);
     visuals.hyperlink_color = color(colors.accent);
     visuals.selection.bg_fill = color(colors.selection);
-    visuals.selection.stroke = Stroke::new(1.0, color(colors.accent));
-    visuals.text_cursor.stroke = Stroke::new(2.0, color(colors.accent));
+    visuals.selection.stroke = Stroke::new(1.0, color(colors.text_primary));
+    visuals.text_cursor.stroke = Stroke::new(2.0, color(colors.focus));
     visuals.window_corner_radius = CornerRadius::same(radius);
     visuals.menu_corner_radius = CornerRadius::same(radius);
     visuals.window_stroke = Stroke::new(1.0, color(colors.border));
@@ -183,11 +183,11 @@ pub fn apply(ctx: &egui::Context, theme: &Theme) {
         &mut visuals.widgets.open,
     ] {
         widget.corner_radius = CornerRadius::same(radius / 2);
-        widget.fg_stroke.color = color(colors.text);
+        widget.fg_stroke.color = color(colors.text_primary);
     }
     visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, color(colors.border));
     visuals.widgets.inactive.weak_bg_fill = color(colors.surface);
-    visuals.widgets.hovered.weak_bg_fill = color(colors.surface);
+    visuals.widgets.hovered.weak_bg_fill = color(colors.surface_hover);
     visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, color(colors.border));
 
     ctx.set_visuals(visuals);
@@ -197,28 +197,17 @@ pub fn apply(ctx: &egui::Context, theme: &Theme) {
             (TextStyle::Body, FontId::proportional(size)),
             (TextStyle::Button, FontId::proportional(size)),
             (TextStyle::Monospace, FontId::monospace(size * 0.9)),
-            (TextStyle::Small, FontId::proportional(size * 0.8)),
+            // PowerHive: body 14, small 12.
+            (TextStyle::Small, FontId::proportional(size * 12.0 / 14.0)),
         ]
         .into();
         style.spacing.item_spacing = egui::vec2(6.0, 4.0);
     });
 }
 
-/// Relative luminance (0 dark, 1 light) of a color, to pick egui's dark or light base.
-fn luminance(color: Color) -> f32 {
-    let [red, green, blue, _] = color.rgba.map(|channel| f32::from(channel) / 255.0);
-    0.2126 * red + 0.7152 * green + 0.0722 * blue
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn built_in_themes_give_their_base() {
-        assert!(luminance(Theme::built_in("dark").unwrap().colors.background) < 0.5);
-        assert!(luminance(Theme::built_in("light").unwrap().colors.background) > 0.5);
-    }
 
     #[test]
     fn inter_is_built_in_and_unknown_fonts_fall_back() {

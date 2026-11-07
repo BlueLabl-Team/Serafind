@@ -1,7 +1,7 @@
 //! Icons of the results: one family per kind of entry, drawn with the Phosphor icon font.
 
 use serafind_core::EntryKind;
-use serafind_settings::{Color, IconColors};
+use serafind_settings::{Color, Theme};
 
 /// The kinds of entries that get their own icon and color.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,23 +105,30 @@ impl Family {
             Self::Other => glyph::FILE,
         }
     }
+}
 
-    /// The color of this family in the theme.
-    #[must_use]
-    pub fn color(self, colors: &IconColors) -> Color {
-        match self {
-            Self::Folder => colors.folder,
-            Self::Document => colors.document,
-            Self::Pdf => colors.pdf,
-            Self::Image => colors.image,
-            Self::Audio => colors.audio,
-            Self::Video => colors.video,
-            Self::Archive => colors.archive,
-            Self::Code => colors.code,
-            Self::App => colors.app,
-            Self::Other => colors.other,
-        }
-    }
+/// The color of a family's icon: the theme's own color for it when set, otherwise as in
+/// PowerHive (folders in `accent`, everything else in `text_secondary`).
+#[must_use]
+pub fn color_of(family: Family, theme: &Theme) -> Color {
+    let colors = &theme.icons.colors;
+    let own = match family {
+        Family::Folder => colors.folder,
+        Family::Document => colors.document,
+        Family::Pdf => colors.pdf,
+        Family::Image => colors.image,
+        Family::Audio => colors.audio,
+        Family::Video => colors.video,
+        Family::Archive => colors.archive,
+        Family::Code => colors.code,
+        Family::App => colors.app,
+        Family::Other => colors.other,
+    };
+    own.unwrap_or(if family == Family::Folder {
+        theme.colors.accent
+    } else {
+        theme.colors.text_secondary
+    })
 }
 
 #[cfg(test)]
@@ -144,5 +151,15 @@ mod tests {
     #[case(EntryKind::File, "README", Family::Other)]
     fn families(#[case] kind: EntryKind, #[case] name: &str, #[case] family: Family) {
         assert_eq!(Family::of(kind, name), family);
+    }
+
+    #[test]
+    fn colors_as_in_powerhive_unless_set() {
+        let mut theme = Theme::built_in("dark").unwrap();
+        assert_eq!(color_of(Family::Folder, &theme), theme.colors.accent);
+        assert_eq!(color_of(Family::Pdf, &theme), theme.colors.text_secondary);
+        let red = Color::parse("#ff0000").unwrap();
+        theme.icons.colors.pdf = Some(red);
+        assert_eq!(color_of(Family::Pdf, &theme), red);
     }
 }

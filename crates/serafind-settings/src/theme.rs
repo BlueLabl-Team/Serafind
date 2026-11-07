@@ -95,32 +95,46 @@ macro_rules! section {
 }
 
 section! {
-    /// `[colors]`.
+    /// `[colors]`: the color roles of PowerHive, so that themes look alike in both applications.
     Colors / PartialColors {
-        /// The bar.
-        background: Color,
-        /// The input, a hovered row.
-        surface: Color,
-        /// Borders.
-        border: Color,
-        /// Text.
-        text: Color,
-        /// Folders, hints, counters.
-        text_muted: Color,
-        /// Caret, active mode, focus.
+        /// Main brand color.
+        primary: Color,
+        /// Second brand color.
+        secondary: Color,
+        /// Third brand color.
+        tertiary: Color,
+        /// Highlights: border of the bar, search icon, folders, matched letters.
         accent: Color,
-        /// The selected row.
+        /// Destructive actions.
+        danger: Color,
+        /// Window background.
+        background: Color,
+        /// Panels.
+        surface: Color,
+        /// Raised panels: the bar itself.
+        surface_elevated: Color,
+        /// A hovered row, an excluded chip.
+        surface_hover: Color,
+        /// Main text.
+        text_primary: Color,
+        /// Folders, hints, counters, icons.
+        text_secondary: Color,
+        /// Placeholder and completion text.
+        text_disabled: Color,
+        /// Separators.
+        border: Color,
+        /// The selected row, chips, selected text.
         selection: Color,
-        /// Matched letters.
-        highlight: Color,
-        /// Chip background.
-        chip: Color,
-        /// Chip text.
-        chip_text: Color,
+        /// Keyboard focus and caret.
+        focus: Color,
+        /// Success messages.
+        success: Color,
+        /// Warnings.
+        warning: Color,
         /// Chips that cannot be used, settings errors.
         error: Color,
-        /// Shadow of the bar.
-        shadow: Color,
+        /// Information.
+        info: Color,
     }
 }
 
@@ -148,29 +162,52 @@ section! {
     }
 }
 
-section! {
-    /// `[icons.colors]`: one color per kind of entry.
-    IconColors / PartialIconColors {
-        /// Folders.
-        folder: Color,
-        /// Text and office documents.
-        document: Color,
-        /// PDF files.
-        pdf: Color,
-        /// Pictures.
-        image: Color,
-        /// Music and sounds.
-        audio: Color,
-        /// Videos.
-        video: Color,
-        /// Archives.
-        archive: Color,
-        /// Source code.
-        code: Color,
-        /// Applications.
-        app: Color,
-        /// Anything else.
-        other: Color,
+/// `[icons.colors]`: optional color per kind of entry. By default (as in PowerHive) icons use
+/// `text_secondary` and folders `accent`.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct IconColors {
+    /// Folders.
+    pub folder: Option<Color>,
+    /// Text and office documents.
+    pub document: Option<Color>,
+    /// PDF files.
+    pub pdf: Option<Color>,
+    /// Pictures.
+    pub image: Option<Color>,
+    /// Music and sounds.
+    pub audio: Option<Color>,
+    /// Videos.
+    pub video: Option<Color>,
+    /// Archives.
+    pub archive: Option<Color>,
+    /// Source code.
+    pub code: Option<Color>,
+    /// Applications.
+    pub app: Option<Color>,
+    /// Anything else.
+    pub other: Option<Color>,
+}
+
+impl IconColors {
+    fn apply_to(self, target: &mut Self) {
+        let pairs = [
+            (self.folder, &mut target.folder),
+            (self.document, &mut target.document),
+            (self.pdf, &mut target.pdf),
+            (self.image, &mut target.image),
+            (self.audio, &mut target.audio),
+            (self.video, &mut target.video),
+            (self.archive, &mut target.archive),
+            (self.code, &mut target.code),
+            (self.app, &mut target.app),
+            (self.other, &mut target.other),
+        ];
+        for (value, slot) in pairs {
+            if value.is_some() {
+                *slot = value;
+            }
+        }
     }
 }
 
@@ -180,7 +217,8 @@ section! {
 pub struct Icons {
     /// The icon set.
     pub set: IconSet,
-    /// One color per kind of entry.
+    /// Optional color per kind of entry.
+    #[serde(default)]
     pub colors: IconColors,
 }
 
@@ -188,7 +226,17 @@ pub struct Icons {
 #[serde(default, deny_unknown_fields)]
 struct PartialIcons {
     set: Option<IconSet>,
-    colors: Option<PartialIconColors>,
+    colors: Option<IconColors>,
+}
+
+/// Whether a theme is dark or light (egui starts from its dark or light look).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ThemeMode {
+    /// Light text on a dark background.
+    Dark,
+    /// Dark text on a light background.
+    Light,
 }
 
 /// A complete theme.
@@ -197,6 +245,8 @@ struct PartialIcons {
 pub struct Theme {
     /// Name shown to the user.
     pub name: String,
+    /// Dark or light.
+    pub mode: ThemeMode,
     /// Colors.
     pub colors: Colors,
     /// Font.
@@ -212,6 +262,7 @@ pub struct Theme {
 struct PartialTheme {
     extends: Option<String>,
     name: Option<String>,
+    mode: Option<ThemeMode>,
     colors: Option<PartialColors>,
     font: Option<PartialFont>,
     shape: Option<PartialShape>,
@@ -222,6 +273,9 @@ impl PartialTheme {
     fn apply_to(self, theme: &mut Theme) {
         if let Some(name) = self.name {
             theme.name = name;
+        }
+        if let Some(mode) = self.mode {
+            theme.mode = mode;
         }
         if let Some(colors) = self.colors {
             colors.apply_to(&mut theme.colors);
@@ -353,6 +407,7 @@ mod tests {
         assert_eq!(theme.shape.radius, 16);
         assert_eq!(theme.colors.background, light.colors.background);
         assert_eq!(theme.icons, light.icons);
+        assert_eq!(theme.mode, ThemeMode::Light);
     }
 
     #[test]

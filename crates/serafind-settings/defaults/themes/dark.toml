@@ -1,46 +1,59 @@
-# Serafind theme: Dark.
+# Serafind theme: Default Dark (the colors of PowerHive's Default Dark theme).
 #
 # Copy this file under another name in the same folder to make your own theme, then choose it
 # in config.toml (theme = "file-name-without-toml"). A theme can start from another one with
 # extends = "dark" and give only the values it changes. Colors are "#rrggbb" or "#rrggbbaa".
 
-name = "Dark"
+name = "Default Dark"
+mode = "dark"            # "dark" or "light"
 
 [colors]
-background = "#202020"   # the bar
-surface = "#2b2b2b"      # the input, a hovered row
-border = "#3a3a3a"
-text = "#f2f2f2"
-text_muted = "#9d9d9d"   # folders, hints, counters
-accent = "#4cc2ff"       # caret, active mode, focus
-selection = "#4cc2ff2e"  # the selected row
-highlight = "#4cc2ff"    # matched letters
-chip = "#363636"
-chip_text = "#e3e3e3"
-error = "#ff6b6b"        # chips that cannot be used, settings errors
-shadow = "#00000066"
+primary = "#4C4C9D"
+secondary = "#712F79"
+tertiary = "#976391"
+accent = "#F7996E"           # border of the bar, search icon, folders, matched letters
+danger = "#883007"
+
+background = "#171624"
+surface = "#292538"
+surface_elevated = "#353044" # the bar
+surface_hover = "#3E3850"    # a hovered row, an excluded chip
+
+text_primary = "#FFFFFF"
+text_secondary = "#B7AFC1"   # folders, hints, counters, icons
+text_disabled = "#6E6779"    # placeholder, completion
+border = "#45404E"           # separators
+
+selection = "#4C4C9D"        # the selected row, chips
+focus = "#F7996E"            # caret
+
+success = "#4CAF79"
+warning = "#E5B45C"
+error = "#D65B5B"            # chips that cannot be used, settings errors
+info = "#6FA8DC"
 
 [font]
 family = "Inter"         # "Inter" (built in), an installed font name, or a .ttf / .otf path
-size = 15
+size = 14                # the search input is a little larger
 
 [shape]
-radius = 10              # corner radius of the bar, chips and rows
+radius = 10              # corner radius of the bar (chips and rows use less)
 padding = 10
-row_height = 36
+row_height = 34
 shadow = true
 
 [icons]
 set = "phosphor"         # "phosphor" or "none"
 
+# Icons use text_secondary, folders use accent. To color a kind of entry, remove the # :
 [icons.colors]
-folder = "#e8b54a"
-document = "#5b9bd5"
-pdf = "#e5534b"
-image = "#58c27d"
-audio = "#c678dd"
-video = "#d19a66"
-archive = "#a8a8a8"
-code = "#61afef"
-app = "#4cc2ff"
-other = "#9d9d9d"
+# folder = "#F7996E"
+# document = "#6FA8DC"
+# pdf = "#D65B5B"
+# image = "#4CAF79"
+# audio = "#976391"
+# video = "#E5B45C"
+# archive = "#B7AFC1"
+# code = "#6FA8DC"
+# app = "#F7996E"
+# other = "#B7AFC1"
