@@ -38,8 +38,8 @@ size = 14                # the search input is a little larger
 
 [shape]
 radius = 10              # corner radius of the bar (chips and rows use less)
-padding = 10
-row_height = 34
+padding = 12
+row_height = 38
 shadow = true
 
 [icons]

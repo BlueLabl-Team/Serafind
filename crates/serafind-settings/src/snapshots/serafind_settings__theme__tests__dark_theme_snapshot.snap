@@ -32,8 +32,8 @@ Theme {
     },
     shape: Shape {
         radius: 10,
-        padding: 10,
-        row_height: 34,
+        padding: 12,
+        row_height: 38,
         shadow: true,
     },
     icons: Icons {

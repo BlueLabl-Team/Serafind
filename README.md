@@ -125,8 +125,9 @@ cargo insta review             # review changed snapshots
 | 1 | `core`: search syntax (PowerHive grammar + mode keywords), matching, ranking (fuzzy / prefix) | ✅ |
 | 2 | `index`: parallel first walk, filesystem watching, exclusions, benchmarks | ✅ |
 | 3 | Settings and themes (TOML, defaults, validation, live reload) | ✅ |
-| 3 | Search bar (egui): input, chips, results, keyboard navigation, `in:` completion | 🚧 |
+| 3 | Search bar (egui): input, chips, results, keyboard navigation, `in:` completion | ✅ |
 | 4 | Resident process: single instance, `serafind toggle`, global shortcut (X11, Windows, Wayland portal), tray icon | ⬜ |
+| 4b | Choose where the bar appears on Wayland (layer-shell, focus on X11, or another way: to be decided) | ⬜ |
 | 5 | Actions: open, show in the file manager, copy the path | ⬜ |
 | 6 | Apps mode: `.desktop` files (Linux), Start menu shortcuts (Windows) | ⬜ |
 | 7 | Content mode: on-demand parallel search | ⬜ |

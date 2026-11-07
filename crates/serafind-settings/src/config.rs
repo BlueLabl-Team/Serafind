@@ -223,7 +223,7 @@ impl Default for Appearance {
 impl Default for Window {
     fn default() -> Self {
         Self {
-            width: 680,
+            width: 760,
             top: 0.25,
             screen: Screen::Mouse,
             backend: Backend::Wayland,
