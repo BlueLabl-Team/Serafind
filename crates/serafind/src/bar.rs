@@ -3,14 +3,16 @@
 //! The bar only draws itself into a [`egui::Ui`] and records what it wants from the window
 //! ([`Request`]): it runs the same in the real window and in tests.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+use serafind_ipc::Action;
 
 use eframe::egui::{
-    self, Align, Color32, CornerRadius, FontFamily, FontId, Key, Layout, Margin, Modifiers, RichText, Sense,
-    Stroke, TextFormat, Ui, text::LayoutJob,
+    self, Align, Color32, CornerRadius, FontFamily, FontId, Layout, Margin, RichText, Sense, Stroke,
+    TextFormat, Ui, text::LayoutJob,
 };
 use serafind_core::{EntryKind, PartKind, SearchMode};
-use serafind_settings::{Chips, Escape, IconSet, ModeSelector, Rows, Settings};
+use serafind_settings::{Chips, Click, Escape, IconSet, ModeSelector, Rows, Settings};
 
 use crate::completion::{complete_folder, typed_folder};
 use crate::icons::{self, Family};
@@ -18,15 +20,17 @@ use crate::search::{Outcome, Row, Searcher};
 use crate::strings::Strings;
 use crate::style::{self, BOLD, ICONS, color};
 
+mod bindings;
+
+use bindings::{Bindings, Command, DIGITS};
+
 /// What the bar asks from the window.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Request {
     /// Close (or hide) the bar.
     Close,
-    /// Open an entry.
-    Open(PathBuf),
-    /// Show an entry in its folder.
-    Reveal(PathBuf),
+    /// Do something with an entry (open it, show it in its folder, open a terminal there).
+    Act(Action, PathBuf),
 }
 
 /// The search bar and its state.
@@ -47,6 +51,9 @@ pub struct Bar {
     problems: Vec<String>,
     requests: Vec<Request>,
     focus_input: bool,
+    bindings: Bindings,
+    /// A copy key was handled in this frame.
+    copied: bool,
 }
 
 const INPUT_ID: &str = "serafind-input";
@@ -56,6 +63,8 @@ impl Bar {
     #[must_use]
     pub fn new(settings: Settings, searcher: Searcher) -> Self {
         Self {
+            bindings: Bindings::new(&settings.config.keys),
+            copied: false,
             settings,
             strings: Strings::ENGLISH,
             searcher,
@@ -82,6 +91,7 @@ impl Bar {
 
     /// Uses new settings (after a reload).
     pub fn set_settings(&mut self, settings: Settings) {
+        self.bindings = Bindings::new(&settings.config.keys);
         self.settings = settings;
         self.searched = None;
     }
@@ -112,6 +122,13 @@ impl Bar {
         &self.outcome
     }
 
+    /// The message shown in the footer.
+    #[cfg(test)]
+    #[must_use]
+    pub fn notice(&self) -> Option<&str> {
+        self.notice.as_deref()
+    }
+
     /// The selected row.
     #[cfg(test)]
     #[must_use]
@@ -124,9 +141,22 @@ impl Bar {
         std::mem::take(&mut self.requests)
     }
 
-    /// Shows a short message in the footer until the next search.
-    pub fn notify(&mut self, notice: impl Into<String>) {
-        self.notice = Some(notice.into());
+    /// Does what an [`Request::Act`] asked, through the resident process. Returns true when the
+    /// bar should close now; on failure the reason is shown in the footer.
+    pub fn perform(&mut self, action: Action, path: &Path) -> bool {
+        match self.searcher.act(action, path) {
+            Ok(()) => {
+                let behavior = &self.settings.config.behavior;
+                match action {
+                    Action::Open | Action::Reveal => behavior.close_after_open,
+                    Action::Terminal => behavior.close_after_terminal,
+                }
+            }
+            Err(message) => {
+                self.notice = Some(message);
+                false
+            }
+        }
     }
 
     /// Prepares the bar for being shown again: empty, or the last search when asked.
@@ -223,74 +253,64 @@ impl Bar {
     // --- Keys ---
 
     fn handle_keys(&mut self, ctx: &egui::Context) {
-        let pressed =
-            |modifiers: Modifiers, key: Key| ctx.input_mut(|input| input.consume_key(modifiers, key));
         let rows = self.outcome.rows.len();
         let page = usize::from(self.settings.config.bar.visible_results).max(1);
-
-        if pressed(Modifiers::NONE, Key::Escape) {
-            if self.settings.config.behavior.escape == Escape::ClearThenClose && !self.line.is_empty() {
-                self.line.clear();
-            } else {
-                self.requests.push(Request::Close);
+        let bindings = self.bindings.clone();
+        for (modifiers, key, command) in bindings.keys() {
+            // Leave the key to the input when the command has nothing to do.
+            let applies = match command {
+                Command::Complete => {
+                    self.ghost().is_some() || (!self.completions.is_empty() && self.line.ends_with('/'))
+                }
+                Command::CopyPath | Command::CopyName => Self::input_has_no_selection(ctx),
+                _ => true,
+            };
+            if applies && ctx.input_mut(|input| input.consume_key(modifiers, key)) {
+                self.run(ctx, command, rows, page);
             }
         }
-        if pressed(Modifiers::NONE, Key::ArrowDown) && rows > 0 {
-            self.select((self.selected + 1).min(rows - 1));
-        }
-        if pressed(Modifiers::NONE, Key::ArrowUp) {
-            self.select(self.selected.saturating_sub(1));
-        }
-        if pressed(Modifiers::NONE, Key::PageDown) && rows > 0 {
-            self.select((self.selected + page).min(rows - 1));
-        }
-        if pressed(Modifiers::NONE, Key::PageUp) {
-            self.select(self.selected.saturating_sub(page));
-        }
-        if pressed(Modifiers::COMMAND, Key::Enter) {
-            self.act(self.selected, Request::Reveal);
-        }
-        if pressed(Modifiers::NONE, Key::Enter) {
-            self.act(self.selected, Request::Open);
-        }
-        if pressed(Modifiers::SHIFT, Key::Tab) {
-            self.tab = self.tab.previous();
-        }
-        if pressed(Modifiers::NONE, Key::Tab) {
-            if self.ghost().is_some() || (!self.completions.is_empty() && self.line.ends_with('/')) {
-                self.accept_completion(ctx);
-            } else {
-                self.tab = self.tab.next();
-            }
-        }
-        let numbers = [
-            Key::Num1,
-            Key::Num2,
-            Key::Num3,
-            Key::Num4,
-            Key::Num5,
-            Key::Num6,
-            Key::Num7,
-            Key::Num8,
-            Key::Num9,
-        ];
-        for (index, key) in numbers.into_iter().enumerate() {
-            if index < SearchMode::ALL.len() && pressed(Modifiers::COMMAND, key) {
+        for (index, key) in DIGITS.into_iter().enumerate() {
+            if index < SearchMode::ALL.len()
+                && ctx.input_mut(|input| input.consume_key(bindings.mode_with_digit, key))
+            {
                 self.tab = SearchMode::ALL[index];
             }
-            if pressed(Modifiers::ALT, key) {
-                self.act(index, Request::Open);
+            if ctx.input_mut(|input| input.consume_key(bindings.open_with_digit, key)) {
+                self.act(index, Action::Open);
             }
-        }
-        if Self::input_has_no_selection(ctx) && pressed(Modifiers::COMMAND, Key::C) {
-            self.copy_path(ctx, self.selected);
         }
         ctx.input_mut(|input| {
             // Copy shortcuts arrive as events too: drop it once handled above.
-            if self.notice.as_deref() == Some(self.strings.path_copied) {
+            if self.copied {
                 input.events.retain(|event| !matches!(event, egui::Event::Copy));
             }
         });
+        self.copied = false;
+    }
+
+    fn run(&mut self, ctx: &egui::Context, command: Command, rows: usize, page: usize) {
+        match command {
+            Command::Open => self.act(self.selected, Action::Open),
+            Command::Reveal => self.act(self.selected, Action::Reveal),
+            Command::Terminal => self.act(self.selected, Action::Terminal),
+            Command::CopyPath => self.copy(ctx, self.selected, false),
+            Command::CopyName => self.copy(ctx, self.selected, true),
+            Command::Close => {
+                if self.settings.config.behavior.escape == Escape::ClearThenClose && !self.line.is_empty() {
+                    self.line.clear();
+                } else {
+                    self.requests.push(Request::Close);
+                }
+            }
+            Command::NextResult if rows > 0 => self.select((self.selected + 1).min(rows - 1)),
+            Command::PreviousResult => self.select(self.selected.saturating_sub(1)),
+            Command::NextPage if rows > 0 => self.select((self.selected + page).min(rows - 1)),
+            Command::PreviousPage => self.select(self.selected.saturating_sub(page)),
+            Command::Complete => self.accept_completion(ctx),
+            Command::NextMode => self.tab = self.tab.next(),
+            Command::PreviousMode => self.tab = self.tab.previous(),
+            Command::NextResult | Command::NextPage => {}
+        }
     }
 
     fn input_has_no_selection(ctx: &egui::Context) -> bool {
@@ -304,16 +324,27 @@ impl Bar {
         self.scroll_to_selected = true;
     }
 
-    fn act(&mut self, index: usize, request: fn(PathBuf) -> Request) {
+    fn act(&mut self, index: usize, action: Action) {
         if let Some(row) = self.outcome.rows.get(index) {
-            self.requests.push(request(row.path.clone()));
+            self.requests.push(Request::Act(action, row.path.clone()));
         }
     }
 
-    fn copy_path(&mut self, ctx: &egui::Context, index: usize) {
-        if let Some(row) = self.outcome.rows.get(index) {
+    /// Copies the path, or only the name, of a row.
+    fn copy(&mut self, ctx: &egui::Context, index: usize, name_only: bool) {
+        let Some(row) = self.outcome.rows.get(index) else {
+            return;
+        };
+        if name_only {
+            ctx.copy_text(row.name.clone());
+            self.notice = Some(self.strings.name_copied.to_owned());
+        } else {
             ctx.copy_text(row.path.display().to_string());
             self.notice = Some(self.strings.path_copied.to_owned());
+        }
+        self.copied = true;
+        if self.settings.config.behavior.close_after_copy {
+            self.requests.push(Request::Close);
         }
     }
 
@@ -512,14 +543,18 @@ impl Bar {
         let row_height = f32::from(self.settings.config.bar.row_height)
             * if rows_layout == Rows::Double { 1.4 } else { 1.0 };
         let visible = f32::from(self.settings.config.bar.visible_results);
+        let single_click = self.settings.config.behavior.click == Click::Single;
         let mut clicked = None;
+        let mut opened = None;
         egui::ScrollArea::vertical()
             .max_height(row_height * visible + 2.0)
             .auto_shrink([false, true])
             .show(ui, |ui| {
                 for (index, row) in self.outcome.rows.iter().enumerate() {
                     let response = self.result_row(ui, index, row, row_height, rows_layout);
-                    if response.clicked() {
+                    if response.double_clicked() || (single_click && response.clicked()) {
+                        opened = Some(index);
+                    } else if response.clicked() {
                         clicked = Some(index);
                     }
                     if index == self.selected && self.scroll_to_selected {
@@ -530,7 +565,10 @@ impl Bar {
         self.scroll_to_selected = false;
         if let Some(index) = clicked {
             self.selected = index;
-            self.act(index, Request::Open);
+        }
+        if let Some(index) = opened {
+            self.selected = index;
+            self.act(index, Action::Open);
         }
     }
 

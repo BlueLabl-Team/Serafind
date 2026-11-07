@@ -25,7 +25,7 @@ serde = { version = "1.0", features = ["derive"] }
 toml = "1.2"
 serde_json = "1.0"
 interprocess = "2.4"
-ashpd = { version = "0.14", default-features = false, features = ["async-io", "global_shortcuts", "notification"] }
+ashpd = { version = "0.14", default-features = false, features = ["async-io", "global_shortcuts", "notification", "open_uri"] }
 global-hotkey = "0.9"
 ksni = { version = "0.3", default-features = false, features = ["async-io", "blocking"] }
 tray-icon = "0.26"

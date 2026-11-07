@@ -328,6 +328,12 @@ mod hotkey {
             Key::Home => Code::Home,
             Key::End => Code::End,
             Key::PageUp => Code::PageUp,
+            Key::Escape => Code::Escape,
+            Key::Backspace => Code::Backspace,
+            Key::Up => Code::ArrowUp,
+            Key::Down => Code::ArrowDown,
+            Key::Left => Code::ArrowLeft,
+            Key::Right => Code::ArrowRight,
             Key::PageDown => Code::PageDown,
             Key::Grave => Code::Backquote,
         }

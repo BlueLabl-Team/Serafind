@@ -40,6 +40,28 @@ pub enum Request {
     },
     /// From the bar: receive [`Event`]s on this connection from now on.
     Subscribe,
+    /// Do something with a file or folder.
+    Act {
+        /// What.
+        action: Action,
+        /// The file or folder.
+        path: String,
+        /// A Wayland activation token, so that the opened window gets the focus.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        activation_token: Option<String>,
+    },
+}
+
+/// What [`Request::Act`] does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Action {
+    /// Open with the default application.
+    Open,
+    /// Show in the file manager, selected in its folder.
+    Reveal,
+    /// Open a terminal in the folder (the folder of a file).
+    Terminal,
 }
 
 /// The answer to a [`Request`].
@@ -77,7 +99,10 @@ pub enum Event {
 
 /// The state of the resident process.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[expect(clippy::struct_excessive_bools, reason = "independent yes/no facts of a report")]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent yes/no facts of a report"
+)]
 pub struct Status {
     /// Its process id.
     pub pid: u32,
@@ -181,6 +206,10 @@ mod tests {
         r#"{"type":"search","line":"invoice ext:pdf","mode":"all","max":50}"#
     )]
     #[case(Request::BarVisible { visible: false }, r#"{"type":"bar_visible","visible":false}"#)]
+    #[case(
+        Request::Act { action: Action::Reveal, path: "/home/me/a.pdf".into(), activation_token: None },
+        r#"{"type":"act","action":"reveal","path":"/home/me/a.pdf"}"#
+    )]
     fn requests_are_stable_json(#[case] request: Request, #[case] json: &str) {
         assert_eq!(serde_json::to_string(&request).unwrap(), json);
         assert_eq!(serde_json::from_str::<Request>(json).unwrap(), request);

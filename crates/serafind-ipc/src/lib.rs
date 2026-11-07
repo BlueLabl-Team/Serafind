@@ -18,7 +18,7 @@
 mod message;
 mod transport;
 
-pub use message::{Event, Kind, Mode, Request, Response, Results, Row, Status};
+pub use message::{Action, Event, Kind, Mode, Request, Response, Results, Row, Status};
 pub use transport::{
     Client, Connection, Listener, SOCKET_VARIABLE, Stream, read_message, socket_location, write_message,
 };

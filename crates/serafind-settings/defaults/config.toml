@@ -58,6 +58,44 @@ escape = "close"
 # Keep the bar hidden between openings: it opens instantly but stays in memory. Set to false to
 # close it and free the memory. On Wayland a window cannot be hidden: the bar is always closed.
 keep_window = true
+# Mouse: "double" (a click selects, a double click opens) or "single" (a click opens).
+click = "double"
+# Close the bar after opening a result or showing it in its folder.
+close_after_open = true
+# Close the bar after copying a path or a name.
+close_after_copy = false
+# Close the bar after opening a terminal.
+close_after_terminal = true
+
+[actions]
+# Terminal opened in the folder of a result (the folder itself, or the folder of a file).
+# "auto" finds one: xdg-terminal-exec, ptyxis, gnome-terminal, konsole, kitty, alacritty, wezterm,
+# foot or xterm on Linux; Windows Terminal or PowerShell on Windows. Otherwise a command, where
+# {dir} is replaced by the folder, e.g. "kitty --directory {dir}"; without {dir} the terminal
+# starts in the folder.
+terminal = "auto"
+
+[keys]
+# Keys of the bar: modifiers (Ctrl, Alt, Shift) and a key, joined with "+". Keys: a letter, a digit,
+# F1 to F24, Enter, Tab, Space, Escape, Backspace, Delete, Insert, Home, End, PageUp, PageDown,
+# Up, Down, Left, Right. A letter, digit or editing key needs Ctrl or Alt: it is used for typing.
+open = "Enter"
+reveal = "Ctrl+Enter"          # show in the file manager
+copy_path = "Ctrl+C"           # when no text of the search is selected
+copy_name = "Ctrl+Shift+C"
+terminal = "Ctrl+T"
+close = "Escape"
+next_result = "Down"
+previous_result = "Up"
+next_page = "PageDown"
+previous_page = "PageUp"
+next_mode = "Tab"
+previous_mode = "Shift+Tab"
+# Accept the proposed folder after "in:" (wins over next_mode when it is the same key).
+complete = "Tab"
+# Modifiers that, with a digit, choose a mode (1 to 5) or open that result (1 to 9).
+mode_with_digit = "Ctrl"
+open_with_digit = "Alt"
 
 [index]
 # Folders indexed. "~" is the home folder.

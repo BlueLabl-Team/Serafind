@@ -12,7 +12,7 @@ Serafind is a quick search bar for Linux and Windows. Press a global shortcut an
 - **Light**: a single executable of a few megabytes, low memory use when idle, no runtime to install.
 - **Keyboard first**: every mode and action is reachable by a shortcut or a keyword.
 
-## Features (planned)
+## Features
 
 ### Modes
 
@@ -42,9 +42,19 @@ invoice ext:pdf,docx in:~/Documents type:file -draft "exact phrase" rep*rt
 
 | Key | Action |
 |---|---|
-| Enter | Open |
-| Ctrl+Enter | Show in the file manager |
-| Ctrl+C | Copy the path |
+| Enter, double click | Open with the default application |
+| Ctrl+Enter | Show in the file manager, selected in its folder |
+| Ctrl+C | Copy the full path (when no text of the search is selected) |
+| Ctrl+Shift+C | Copy the name |
+| Ctrl+T | Open a terminal in the folder (the folder of a file) |
+| Alt+1 … Alt+9 | Open that result |
+| ↑ ↓, Page Up / Down | Move the selection |
+| Tab / Shift+Tab, Ctrl+1 … Ctrl+5 | Change the mode (Tab accepts the proposed `in:` folder first) |
+| Escape | Close |
+
+Every key can be changed in `[keys]` of `config.toml`. Opening, showing in the folder and opening a terminal close the bar; copying keeps it open (`[behavior] close_after_*`). A single click can open instead of a double click (`[behavior] click = "single"`).
+
+The resident process does the actions. On Linux, it opens through the desktop portal (`OpenURI`), so that the desktop chooses the application, and falls back on `xdg-open`. The terminal is found automatically (`xdg-terminal-exec`, Ptyxis, GNOME Terminal, Konsole, kitty, Alacritty, WezTerm, foot, xterm; Windows Terminal or PowerShell), or set with `[actions] terminal`.
 
 ## Usage
 
@@ -168,7 +178,7 @@ cargo insta review             # review changed snapshots
 | 3 | Search bar (egui): input, chips, results, keyboard navigation, `in:` completion | ✅ |
 | 4 | Resident process: single instance, `serafind toggle`, global shortcut (X11, Windows, Wayland portal), tray icon | ✅ |
 | 4b | Choose where the bar appears on Wayland (layer-shell, focus on X11, or another way: to be decided) | ⬜ |
-| 5 | Actions: open, show in the file manager, copy the path | ⬜ |
+| 5 | Actions: open, show in the file manager, copy the path or name, terminal; configurable keys | ✅ |
 | 6 | Apps mode: `.desktop` files (Linux), Start menu shortcuts (Windows) | ⬜ |
 | 7 | Content mode: on-demand parallel search | ⬜ |
 | 8 | Start with the session; settings for indexed and excluded folders applied live | ⬜ |

@@ -25,6 +25,10 @@ pub struct Config {
     pub shortcut: Shortcut,
     /// The icon in the notification area.
     pub tray: Tray,
+    /// How actions on a result are done.
+    pub actions: Actions,
+    /// The keys of the bar.
+    pub keys: BarKeys,
 }
 
 /// `[appearance]`.
@@ -143,6 +147,7 @@ pub enum Rows {
 /// `[behavior]`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
+#[expect(clippy::struct_excessive_bools, reason = "independent on/off settings")]
 pub struct Behavior {
     /// Hide the bar when it loses the focus.
     pub hide_on_focus_loss: bool,
@@ -153,6 +158,121 @@ pub struct Behavior {
     /// Keep the bar's window hidden between openings (instant, more memory) instead of closing
     /// it. Not possible on Wayland, where the window is always closed.
     pub keep_window: bool,
+    /// How a result is opened with the mouse.
+    pub click: Click,
+    /// Close the bar after opening a result or showing it in its folder.
+    pub close_after_open: bool,
+    /// Close the bar after copying a path or a name.
+    pub close_after_copy: bool,
+    /// Close the bar after opening a terminal.
+    pub close_after_terminal: bool,
+}
+
+/// How a result is opened with the mouse.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Click {
+    /// A click selects, a double click opens.
+    Double,
+    /// A click opens.
+    Single,
+}
+
+/// `[actions]`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Actions {
+    /// `"auto"`, or the terminal command; `{dir}` is replaced by the folder.
+    pub terminal: String,
+}
+
+impl Default for Actions {
+    fn default() -> Self {
+        Self {
+            terminal: "auto".to_owned(),
+        }
+    }
+}
+
+/// `[keys]`: the keys of the bar, each written like `Ctrl+Shift+C`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct BarKeys {
+    /// Open the selected result.
+    pub open: String,
+    /// Show the selected result in its folder.
+    pub reveal: String,
+    /// Copy the full path of the selected result.
+    pub copy_path: String,
+    /// Copy the name of the selected result.
+    pub copy_name: String,
+    /// Open a terminal in the folder of the selected result.
+    pub terminal: String,
+    /// Close the bar.
+    pub close: String,
+    /// Select the next result.
+    pub next_result: String,
+    /// Select the previous result.
+    pub previous_result: String,
+    /// Select one page of results further.
+    pub next_page: String,
+    /// Select one page of results back.
+    pub previous_page: String,
+    /// Next mode.
+    pub next_mode: String,
+    /// Previous mode.
+    pub previous_mode: String,
+    /// Accept the proposed folder of `in:` (wins over `next_mode` when it is the same key).
+    pub complete: String,
+    /// Modifiers that, with a digit 1 to 5, choose a mode.
+    pub mode_with_digit: String,
+    /// Modifiers that, with a digit 1 to 9, open that result.
+    pub open_with_digit: String,
+}
+
+impl Default for BarKeys {
+    fn default() -> Self {
+        let text = |text: &str| text.to_owned();
+        Self {
+            open: text("Enter"),
+            reveal: text("Ctrl+Enter"),
+            copy_path: text("Ctrl+C"),
+            copy_name: text("Ctrl+Shift+C"),
+            terminal: text("Ctrl+T"),
+            close: text("Escape"),
+            next_result: text("Down"),
+            previous_result: text("Up"),
+            next_page: text("PageDown"),
+            previous_page: text("PageUp"),
+            next_mode: text("Tab"),
+            previous_mode: text("Shift+Tab"),
+            complete: text("Tab"),
+            mode_with_digit: text("Ctrl"),
+            open_with_digit: text("Alt"),
+        }
+    }
+}
+
+impl BarKeys {
+    /// Every key setting with its name, except the modifier-only ones.
+    #[must_use]
+    pub fn named(&self) -> [(&'static str, &str); 13] {
+        [
+            ("open", &self.open),
+            ("reveal", &self.reveal),
+            ("copy_path", &self.copy_path),
+            ("copy_name", &self.copy_name),
+            ("terminal", &self.terminal),
+            ("close", &self.close),
+            ("next_result", &self.next_result),
+            ("previous_result", &self.previous_result),
+            ("next_page", &self.next_page),
+            ("previous_page", &self.previous_page),
+            ("next_mode", &self.next_mode),
+            ("previous_mode", &self.previous_mode),
+            ("complete", &self.complete),
+        ]
+    }
 }
 
 /// What the Escape key does.
@@ -278,6 +398,10 @@ impl Default for Behavior {
             keep_last_query: false,
             escape: Escape::Close,
             keep_window: true,
+            click: Click::Double,
+            close_after_open: true,
+            close_after_copy: false,
+            close_after_terminal: true,
         }
     }
 }
@@ -369,6 +493,47 @@ impl Config {
         if let Err(problem) = crate::Keys::parse(self.shortcut.for_this_system()) {
             problems.push((shortcut_key, problem));
         }
+        for (name, text) in self.keys.named() {
+            if let Err(problem) = crate::Keys::parse_bar(text) {
+                problems.push((key_setting(name), problem));
+            }
+        }
+        for (name, text) in [
+            ("mode_with_digit", &self.keys.mode_with_digit),
+            ("open_with_digit", &self.keys.open_with_digit),
+        ] {
+            match crate::Modifiers::parse(text) {
+                Ok(modifiers) if modifiers.logo => {
+                    problems.push((key_setting(name), "the bar cannot use Super".to_owned()));
+                }
+                Ok(_) => {}
+                Err(problem) => problems.push((key_setting(name), problem)),
+            }
+        }
+        if self.actions.terminal.trim().is_empty() {
+            problems.push(("actions.terminal", "must be \"auto\" or a command".to_owned()));
+        }
         problems
+    }
+}
+
+/// `keys.<name>` as a static string, for error messages.
+fn key_setting(name: &str) -> &'static str {
+    match name {
+        "open" => "keys.open",
+        "reveal" => "keys.reveal",
+        "copy_path" => "keys.copy_path",
+        "copy_name" => "keys.copy_name",
+        "terminal" => "keys.terminal",
+        "close" => "keys.close",
+        "next_result" => "keys.next_result",
+        "previous_result" => "keys.previous_result",
+        "next_page" => "keys.next_page",
+        "previous_page" => "keys.previous_page",
+        "next_mode" => "keys.next_mode",
+        "previous_mode" => "keys.previous_mode",
+        "complete" => "keys.complete",
+        "mode_with_digit" => "keys.mode_with_digit",
+        _ => "keys.open_with_digit",
     }
 }

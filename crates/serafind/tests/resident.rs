@@ -32,7 +32,7 @@ impl Instance {
         std::fs::write(
             settings.join("config.toml"),
             format!(
-                "[index]\nroots = [{:?}]\n[shortcut]\nenabled = false\n",
+                "[index]\nroots = [{:?}]\n[shortcut]\nenabled = false\n[actions]\nterminal = \"true\"\n",
                 data.to_string_lossy()
             ),
         )
@@ -55,6 +55,8 @@ impl Instance {
             .env(SOCKET_VARIABLE, &self.socket)
             // The desktop entry goes into the test folder, not the real home folder.
             .env("XDG_DATA_HOME", &self.data_home)
+            // And so does the log.
+            .env("XDG_STATE_HOME", &self.data_home)
             .output()
             .unwrap()
     }
@@ -165,4 +167,28 @@ fn bad_requests_are_answered_with_an_error() {
     let mut line = String::new();
     std::io::BufReader::new(&stream).read_line(&mut line).unwrap();
     assert!(line.contains("\"type\":\"error\""), "{line}");
+}
+
+#[cfg(unix)]
+#[test]
+fn actions_are_done_by_the_resident_process() {
+    let instance = Instance::new("act");
+    assert!(instance.run(&[]).status.success());
+    let data = instance.settings.parent().unwrap().join("data");
+    // The terminal of these settings is `true`: it starts and ends at once.
+    let terminal = Request::Act {
+        action: serafind_ipc::Action::Terminal,
+        path: data.join("notes.txt").to_string_lossy().into_owned(),
+        activation_token: None,
+    };
+    assert_eq!(instance.call(&terminal).unwrap(), Response::Ok);
+    let missing = Request::Act {
+        action: serafind_ipc::Action::Open,
+        path: data.join("gone.txt").to_string_lossy().into_owned(),
+        activation_token: None,
+    };
+    match instance.call(&missing).unwrap() {
+        Response::Error { message } => assert!(message.contains("no longer exists"), "{message}"),
+        other => panic!("expected an error, got {other:?}"),
+    }
 }
