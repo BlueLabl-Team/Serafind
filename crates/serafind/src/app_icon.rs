@@ -37,7 +37,10 @@ fn from_svg(data: &[u8], size: u32) -> Option<ColorImage> {
     );
     resvg::render(&tree, transform, &mut pixmap.as_mut());
     let pixels = usize::try_from(size).ok()?;
-    Some(ColorImage::from_rgba_premultiplied([pixels, pixels], pixmap.data()))
+    Some(ColorImage::from_rgba_premultiplied(
+        [pixels, pixels],
+        pixmap.data(),
+    ))
 }
 
 fn from_png(data: &[u8]) -> Option<ColorImage> {

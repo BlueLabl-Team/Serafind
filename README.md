@@ -35,7 +35,7 @@ invoice ext:pdf,docx in:~/Documents type:file -draft "exact phrase" rep*rt
 ```
 
 - words (or `"quoted phrases"`) the name must contain; `*` and `?` make a pattern found anywhere in the name (`rep*rt` finds `my-report.pdf`), `^` and `$` anchor it at the start or the end (`^inv`, `.pdf$`); case is ignored unless the word has an upper-case letter, accents are always ignored
-- `ext:` extensions, `in:` starting folder (Tab completes it), `type:` `file` or `folder`
+- `ext:` extensions, `in:` starting folder (Tab completes it), `type:` `file` or `folder`, `c:` text inside the files and `re:` a regular expression inside the files (Content mode)
 - `-` excludes a word or a filter
 
 ### Actions
@@ -55,6 +55,16 @@ invoice ext:pdf,docx in:~/Documents type:file -draft "exact phrase" rep*rt
 Every key can be changed in `[keys]` of `config.toml`. Opening, showing in the folder and opening a terminal close the bar; copying keeps it open (`[behavior] close_after_*`). A single click can open instead of a double click (`[behavior] click = "single"`).
 
 The resident process does the actions. On Linux, it opens through the desktop portal (`OpenURI`), so that the desktop chooses the application, and falls back on `xdg-open`. The terminal is found automatically (`xdg-terminal-exec`, Ptyxis, GNOME Terminal, Konsole, kitty, Alacritty, WezTerm, foot, xterm; Windows Terminal or PowerShell), or set with `[actions] terminal`.
+
+### Text inside files
+
+The **Content** mode (its tab, or `c:"text"` anywhere in the line) finds text inside the indexed files, like ripgrep. Other modes only look at names.
+
+- The words typed are one phrase, found as written: case is ignored unless the phrase has an upper-case letter. `c:"other text"` adds a text that must be there too, `-word` or `-c:` one that must not be. `re:"fix(me)?"` is a regular expression.
+- `ext:` and `in:` choose the files read. Binary files and files over 10 MB (`[content] max_file_size`) are skipped.
+- The search starts after a short pause in typing (`[content] typing_delay`); results come as the files are read, with the progress in the footer.
+- Each file shows the first line found, with its number, and how many lines match.
+- Enter opens the file at that line when its default application is an editor that can (VS Code, Zed, Sublime Text, Kate, gedit, vim, Neovim, Emacs, JetBrains IDEs), else opens it as usual. `[actions] open_at_line = "code -g {file}:{line}"` chooses the command.
 
 ### Applications
 
@@ -191,10 +201,11 @@ cargo insta review             # review changed snapshots
 | 4b | Choose where the bar appears on Wayland (layer-shell, focus on X11, or another way: to be decided) | ⬜ |
 | 5 | Actions: open, show in the file manager, copy the path or name, terminal; configurable keys | ✅ |
 | 6 | Apps mode: `.desktop` files with Flatpak and Snap (Linux), Start menu and Store apps (Windows), real icons | ✅ |
-| 7 | Content mode: on-demand parallel search | ⬜ |
+| 7 | Content mode: on-demand parallel search, `re:` expressions, open at the line | ✅ |
 | 8 | Start with the session; settings for indexed and excluded folders applied live | ⬜ |
 | 9 | GitHub Actions: build, tests, releases (Linux and Windows executables) | ⬜ |
 | 10 | Integration in third-party software through their plugin / extension systems (library, IPC protocol or C ABI: to be decided) | ⬜ |
+| Later | After the first release: text of PDF and Office documents in the Content mode | ⬜ |
 | Later | After the first release: actions of applications (e.g. Firefox's "New Private Window") as results | ⬜ |
 
 ## Known issues

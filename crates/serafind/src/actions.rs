@@ -16,11 +16,102 @@ pub fn perform(action: Action, path: &Path, terminal: &str, token: Option<&str>)
         return Err(format!("{} no longer exists", path.display()));
     }
     match action {
-        Action::Open => open(path, token),
+        // Without the applications, a line cannot be chosen: opened as usual.
+        Action::Open | Action::OpenAtLine { .. } => open(path, token),
         Action::Reveal => reveal(path, token),
         Action::Terminal => open_terminal(&folder_of(path), terminal, token),
         Action::Launch => Err("an application is started by its id".to_owned()),
     }
+}
+
+/// Opens a text file at a line: with the command of the setting (`{file}` and `{line}`
+/// replaced), or with the default application of the file when it is an editor that can go to a
+/// line, else as usual.
+///
+/// # Errors
+/// What went wrong, to show to the user.
+pub fn open_at_line(
+    path: &Path,
+    line: u32,
+    setting: &str,
+    apps: &[App],
+    terminal: &str,
+    token: Option<&str>,
+) -> Result<(), String> {
+    if !path.exists() {
+        return Err(format!("{} no longer exists", path.display()));
+    }
+    let file = path.to_string_lossy();
+    let line_text = line.to_string();
+    if setting.trim() != "auto" {
+        let mut words = setting
+            .split_whitespace()
+            .map(|word| word.replace("{file}", &file).replace("{line}", &line_text));
+        let program = words.next().ok_or("[actions] open_at_line is empty")?;
+        return spawn(Command::new(program).args(words), token);
+    }
+    let editor = default_application(path)
+        .and_then(|id| apps.iter().find(|app| app.id == id))
+        .and_then(|app| Some((app, editor_arguments(&app.id, &file, line)?)));
+    match editor {
+        Some((app, extra)) => {
+            let mut app = app.clone();
+            if let Launch::Command { arguments, .. } = &mut app.launch {
+                arguments.extend(extra);
+            }
+            launch(&app, terminal, token)
+        }
+        None => open(path, token),
+    }
+}
+
+/// The arguments that open `file` at `line`, for the editors that can, known by their desktop
+/// file id. `None` for other applications.
+fn editor_arguments(desktop_id: &str, file: &str, line: u32) -> Option<Vec<String>> {
+    let id = desktop_id.trim_end_matches(".desktop").to_lowercase();
+    let has = |names: &[&str]| names.iter().any(|name| id.contains(name));
+    let at = format!("{file}:{line}");
+    let plus = format!("+{line}");
+    let words: Vec<String> = if has(&["code", "codium"]) {
+        vec!["-g".to_owned(), at]
+    } else if has(&["sublime", "zed"]) {
+        vec![at]
+    } else if has(&["kate", "kwrite"]) {
+        vec!["-l".to_owned(), line.to_string(), file.to_owned()]
+    } else if has(&[
+        "gedit", "vim", "nvim", "emacs", "nano", "helix", "micro", "mousepad", "pluma", "xed",
+    ]) {
+        vec![plus, file.to_owned()]
+    } else if has(&[
+        "jetbrains",
+        "idea",
+        "pycharm",
+        "webstorm",
+        "clion",
+        "goland",
+        "rider",
+        "phpstorm",
+        "rustrover",
+    ]) {
+        vec!["--line".to_owned(), line.to_string(), file.to_owned()]
+    } else {
+        return None;
+    };
+    Some(words)
+}
+
+/// The desktop file id of the default application of a file (Linux, through `xdg-mime`).
+fn default_application(path: &Path) -> Option<String> {
+    if !cfg!(target_os = "linux") {
+        return None;
+    }
+    let query = |arguments: &[&std::ffi::OsStr]| {
+        let output = Command::new("xdg-mime").args(arguments).output().ok()?;
+        let text = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        (output.status.success() && !text.is_empty()).then_some(text)
+    };
+    let mime = query(&["query".as_ref(), "filetype".as_ref(), path.as_os_str()])?;
+    query(&["query".as_ref(), "default".as_ref(), mime.as_ref()])
 }
 
 /// Starts an application, in a terminal when it asks for one.
@@ -334,6 +425,24 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
         assert!(marker.exists());
+    }
+
+    #[rstest::rstest]
+    #[case("code.desktop", &["-g", "/a b.rs:12"])]
+    #[case("com.visualstudio.code.desktop", &["-g", "/a b.rs:12"])]
+    #[case("dev.zed.Zed.desktop", &["/a b.rs:12"])]
+    #[case("org.kde.kate.desktop", &["-l", "12", "/a b.rs"])]
+    #[case("nvim.desktop", &["+12", "/a b.rs"])]
+    #[case("org.gnome.gedit.desktop", &["+12", "/a b.rs"])]
+    #[case("jetbrains-rider.desktop", &["--line", "12", "/a b.rs"])]
+    fn editors_open_at_a_line(#[case] id: &str, #[case] expected: &[&str]) {
+        assert_eq!(editor_arguments(id, "/a b.rs", 12).unwrap(), expected);
+    }
+
+    #[test]
+    fn other_applications_cannot_open_at_a_line() {
+        assert_eq!(editor_arguments("org.gnome.TextEditor.desktop", "/a", 1), None);
+        assert_eq!(editor_arguments("firefox.desktop", "/a", 1), None);
     }
 
     #[test]
