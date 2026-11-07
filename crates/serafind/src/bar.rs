@@ -37,8 +37,8 @@ pub struct Bar {
     line: String,
     tab: SearchMode,
     outcome: Outcome,
-    /// What `outcome` was computed for: line, tab, index ready, maximum.
-    searched: Option<(String, SearchMode, bool, usize)>,
+    /// What `outcome` was computed for: line, tab, maximum.
+    searched: Option<(String, SearchMode, usize)>,
     selected: usize,
     scroll_to_selected: bool,
     completions: Vec<String>,
@@ -129,10 +129,22 @@ impl Bar {
         self.notice = Some(notice.into());
     }
 
+    /// Prepares the bar for being shown again: empty, or the last search when asked.
+    pub fn reset_for_opening(&mut self) {
+        if !self.settings.config.behavior.keep_last_query {
+            self.line.clear();
+            self.tab = SearchMode::All;
+        }
+        self.selected = 0;
+        self.notice = None;
+        self.focus_input = true;
+        self.searched = None;
+    }
+
     /// Draws the bar and handles its keys.
     pub fn ui(&mut self, ui: &mut Ui) {
         self.handle_keys(ui.ctx());
-        self.refresh();
+        self.refresh(&ui.ctx().clone());
         let theme = self.settings.theme.clone();
         let colors = &theme.colors;
         let radius = u8::try_from(theme.shape.radius).unwrap_or(u8::MAX);
@@ -172,14 +184,20 @@ impl Bar {
 
     // --- Search ---
 
-    fn refresh(&mut self) {
+    fn refresh(&mut self, ctx: &egui::Context) {
         let max = usize::from(self.settings.config.bar.max_results);
-        let key = (self.line.clone(), self.tab, self.searcher.is_ready(), max);
+        let key = (self.line.clone(), self.tab, max);
         if self.searched.as_ref() == Some(&key) {
             return;
         }
         self.outcome = self.searcher.run(&self.line, self.tab, max);
-        self.searched = Some(key);
+        if self.outcome.indexing || self.outcome.unreachable {
+            // Ask again shortly: the index will be ready, or the resident process back.
+            self.searched = None;
+            ctx.request_repaint_after(std::time::Duration::from_millis(250));
+        } else {
+            self.searched = Some(key);
+        }
         self.selected = 0;
         self.scroll_to_selected = true;
         self.notice = None;
@@ -630,6 +648,8 @@ impl Bar {
         let outcome = &self.outcome;
         let status = if let Some(notice) = &self.notice {
             notice.clone()
+        } else if outcome.unreachable {
+            strings.unreachable.to_owned()
         } else if outcome.indexing {
             strings.indexing.to_owned()
         } else if outcome.outside_index {

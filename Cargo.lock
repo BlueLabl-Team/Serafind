@@ -3304,7 +3304,10 @@ dependencies = [
  "rstest",
  "serafind-core",
  "serafind-index",
+ "serafind-ipc",
  "serafind-settings",
+ "serde",
+ "serde_json",
  "winit",
 ]
 

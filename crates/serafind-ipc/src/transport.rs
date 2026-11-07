@@ -205,7 +205,16 @@ impl Client {
     /// # Errors
     /// When no resident process listens (`NotFound` or `ConnectionRefused`).
     pub fn connect() -> io::Result<Self> {
-        let stream = LocalSocketStream::connect(socket_name(&socket_location())?)?;
+        Self::connect_to(&socket_location())
+    }
+
+    /// Connects to a resident process listening at `location` (a socket path on Unix, a pipe
+    /// name on Windows), e.g. another instance.
+    ///
+    /// # Errors
+    /// When nothing listens there.
+    pub fn connect_to(location: &str) -> io::Result<Self> {
+        let stream = LocalSocketStream::connect(socket_name(location)?)?;
         Ok(Self {
             connection: Connection::new(stream),
         })
