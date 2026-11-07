@@ -23,6 +23,10 @@ width = 680
 top = 0.25
 # Screen where the bar opens: "mouse" (the screen under the mouse pointer) or "primary".
 screen = "mouse"
+# Linux only. "x11" shows the bar through X11 (XWayland on a Wayland desktop): exact position,
+# always on top. "wayland" is sharper with fractional scaling, but the desktop then chooses
+# where the bar appears.
+backend = "x11"
 
 [layout]
 # Mode selector: "dropdown" (discreet, at the right of the input) or "tabs" (always shown above).
