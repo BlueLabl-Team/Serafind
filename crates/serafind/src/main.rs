@@ -5,6 +5,7 @@
 
 mod actions;
 mod app;
+mod app_icon;
 mod bar;
 mod completion;
 mod daemon;
@@ -17,6 +18,7 @@ mod shortcut;
 mod strings;
 mod style;
 mod tray;
+mod usage;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;

@@ -12,7 +12,7 @@ use eframe::egui::{
     TextFormat, Ui, text::LayoutJob,
 };
 use serafind_core::{EntryKind, PartKind, SearchMode};
-use serafind_settings::{Chips, Click, Escape, IconSet, ModeSelector, Rows, Settings};
+use serafind_settings::{AppIcons, Chips, Click, Escape, IconSet, ModeSelector, Rows, Settings};
 
 use crate::completion::{complete_folder, typed_folder};
 use crate::icons::{self, Family};
@@ -54,6 +54,8 @@ pub struct Bar {
     requests: Vec<Request>,
     focus_input: bool,
     bindings: Bindings,
+    /// Icons of applications already loaded (`None`: could not be read).
+    app_icons: std::cell::RefCell<std::collections::HashMap<PathBuf, Option<egui::TextureHandle>>>,
 }
 
 const INPUT_ID: &str = "serafind-input";
@@ -64,6 +66,7 @@ impl Bar {
     pub fn new(settings: Settings, searcher: Searcher) -> Self {
         Self {
             bindings: Bindings::new(&settings.config.keys),
+            app_icons: std::cell::RefCell::default(),
             settings,
             strings: Strings::ENGLISH,
             searcher,
@@ -148,7 +151,7 @@ impl Bar {
             Ok(()) => {
                 let behavior = &self.settings.config.behavior;
                 match action {
-                    Action::Open | Action::Reveal => behavior.close_after_open,
+                    Action::Open | Action::Reveal | Action::Launch => behavior.close_after_open,
                     Action::Terminal => behavior.close_after_terminal,
                 }
             }
@@ -351,9 +354,15 @@ impl Bar {
     }
 
     fn act(&mut self, index: usize, action: Action) {
-        if let Some(row) = self.outcome.rows.get(index) {
-            self.requests.push(Request::Act(action, row.path.clone()));
-        }
+        let Some(row) = self.outcome.rows.get(index) else {
+            return;
+        };
+        // Opening an application starts it; the other actions are for its program.
+        let request = match (&row.app, action) {
+            (Some(app), Action::Open) => Request::Act(Action::Launch, PathBuf::from(app)),
+            _ => Request::Act(action, row.path.clone()),
+        };
+        self.requests.push(request);
     }
 
     /// Copies the path, or only the name, of a row.
@@ -597,6 +606,27 @@ impl Bar {
         }
     }
 
+    /// The own icon of an application row, loaded once; `None` for other rows, when turned off
+    /// (`[appearance] app_icons`), or when it cannot be read.
+    fn app_icon(&self, ctx: &egui::Context, row: &Row) -> Option<egui::TextureHandle> {
+        let path = row.icon.as_ref()?;
+        if self.settings.config.appearance.app_icons != AppIcons::Real {
+            return None;
+        }
+        let mut icons = self.app_icons.borrow_mut();
+        icons
+            .entry(path.clone())
+            .or_insert_with(|| {
+                let image = crate::app_icon::load(path)?;
+                let options = egui::TextureOptions {
+                    mipmap_mode: Some(egui::TextureFilter::Linear),
+                    ..egui::TextureOptions::LINEAR
+                };
+                Some(ctx.load_texture(path.to_string_lossy(), image, options))
+            })
+            .clone()
+    }
+
     fn result_row(&self, ui: &mut Ui, index: usize, row: &Row, height: f32, layout: Rows) -> egui::Response {
         let theme = &self.settings.theme;
         let colors = &theme.colors;
@@ -615,7 +645,18 @@ impl Bar {
         let mut x = rect.left() + 8.0;
         let middle = rect.center().y;
         let family = Family::of(row.kind, &row.name);
-        if theme.icons.set == IconSet::Phosphor {
+        let icon_size = size * 1.3;
+        if theme.icons.set == IconSet::Phosphor
+            && let Some(texture) = self.app_icon(ui.ctx(), row)
+        {
+            let place = egui::Rect::from_center_size(
+                egui::pos2(x + icon_size / 2.0, middle),
+                egui::vec2(icon_size, icon_size),
+            );
+            let whole = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+            painter.image(texture.id(), place, whole, Color32::WHITE);
+            x += icon_size + 8.0;
+        } else if theme.icons.set == IconSet::Phosphor {
             painter.text(
                 egui::pos2(x, middle),
                 egui::Align2::LEFT_CENTER,
