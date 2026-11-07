@@ -310,7 +310,11 @@ fn preview_window() {
     };
     let folder = PathBuf::from(folder);
     for (name, line) in [("window-empty", ""), ("window-results", "fact")] {
-        let bar = bar_with(Settings::defaults(SystemMode::Dark), index_of(&FILES), Path::new(HOME));
+        let bar = bar_with(
+            Settings::defaults(SystemMode::Dark),
+            index_of(&FILES),
+            Path::new(HOME),
+        );
         let settings = bar.settings().clone();
         let width = f32::from(settings.config.bar.width) + 2.0 * f32::from(crate::app::SHADOW_MARGIN);
         let mut harness = Harness::builder()
@@ -325,7 +329,10 @@ fn preview_window() {
                         .show(ui, |ui| bar.ui(ui))
                         .response
                         .rect;
-                    eprintln!("outer frame rect: {rect:?} (window width {})", ui.ctx().content_rect().width());
+                    eprintln!(
+                        "outer frame rect: {rect:?} (window width {})",
+                        ui.ctx().content_rect().width()
+                    );
                 },
                 bar,
             );
@@ -333,6 +340,10 @@ fn preview_window() {
         if !line.is_empty() {
             type_text(&mut harness, line);
         }
-        harness.render().expect("render").save(folder.join(format!("{name}.png"))).expect("save");
+        harness
+            .render()
+            .expect("render")
+            .save(folder.join(format!("{name}.png")))
+            .expect("save");
     }
 }
