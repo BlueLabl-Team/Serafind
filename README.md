@@ -164,6 +164,10 @@ cargo insta review             # review changed snapshots
 | 9 | GitHub Actions: build, tests, releases (Linux and Windows executables) | ⬜ |
 | 10 | Integration in third-party software through their plugin / extension systems (library, IPC protocol or C ABI: to be decided) | ⬜ |
 
+## Known issues
+
+- **GNOME 48 says the shortcut failed when it worked.** When an application asks again for a shortcut it already holds, `xdg-desktop-portal-gnome` 48 binds it but answers `BindShortcuts` with a failure. Serafind then asks the portal which shortcuts it really holds (`ListShortcuts`) before reporting a problem. If `serafind status` shows an error while the key works, the workaround did not apply: please open an issue with the output of `serafind status`.
+
 ## License
 
 [Apache License 2.0](LICENSE)
