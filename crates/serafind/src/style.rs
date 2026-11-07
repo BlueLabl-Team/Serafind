@@ -6,7 +6,7 @@ use std::sync::Arc;
 use eframe::egui::{
     self, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Stroke, TextStyle,
 };
-use serafind_settings::{Color, Theme, ThemeMode};
+use serafind_settings::{Color, Settings, Theme, ThemeMode};
 
 /// Family name of the semi-bold text font (names, matched letters).
 pub const BOLD: &str = "serafind-bold";
@@ -151,11 +151,12 @@ fn installed_font_file(_family: &str) -> Option<std::path::PathBuf> {
     None
 }
 
-/// Applies a theme's colors, sizes and shapes to egui.
-pub fn apply(ctx: &egui::Context, theme: &Theme) {
+/// Applies the theme's colors and shapes, and the bar's text size, to egui.
+pub fn apply(ctx: &egui::Context, settings: &Settings) {
+    let theme = &settings.theme;
     let colors = &theme.colors;
     let dark = theme.mode == ThemeMode::Dark;
-    let size = f32::from(theme.font.size);
+    let size = f32::from(settings.config.bar.font_size);
     let radius = u8::try_from(theme.shape.radius).unwrap_or(u8::MAX);
 
     let mut visuals = if dark {

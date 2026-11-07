@@ -32,14 +32,12 @@ warning = "#E5B45C"
 error = "#D65B5B"            # chips that cannot be used, settings errors
 info = "#6FA8DC"
 
+# Sizes (bar width, padding, rows, text size) are in config.toml, section [bar].
 [font]
 family = "Inter"         # "Inter" (built in), an installed font name, or a .ttf / .otf path
-size = 14                # the search input is a little larger
 
 [shape]
 radius = 10              # corner radius of the bar (chips and rows use less)
-padding = 12
-row_height = 38
 shadow = true
 
 [icons]

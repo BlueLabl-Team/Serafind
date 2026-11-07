@@ -58,7 +58,7 @@ Everything is set in one folder: `~/.config/serafind/` on Linux, `%APPDATA%\Sera
 
 ```
 serafind/
-├── config.toml        behavior, layout, results, indexed folders, shortcut, theme choice
+├── config.toml        bar size and text size, layout, behavior, indexed folders, shortcut, theme choice
 └── themes/
     ├── dark.toml      built-in themes (PowerHive's Default Dark and Default Light), written as examples
     ├── light.toml
@@ -68,6 +68,7 @@ serafind/
 - Changes apply as soon as a file is saved.
 - Every key is optional: a missing key keeps its default.
 - An unknown key, a wrong value or a syntax error makes the file be refused. The previous settings stay, and the error is shown in the bar with its file and line.
+- Every dimension of the bar (width, padding, row height, text size, number of results) is in `[bar]` of `config.toml`; themes only hold the look (colors, font, corners, shadow, icons).
 - Themes use the same color roles as PowerHive (`primary`, `accent`, `surface_elevated`, `text_secondary`…), so both applications look alike.
 - `theme = "system"` follows the dark or light mode of the desktop. Font and icons come from the theme, and `[appearance]` in `config.toml` can override them.
 - The global shortcut is `Super+F` by default (`[shortcut] toggle`), with an optional per-system value.
