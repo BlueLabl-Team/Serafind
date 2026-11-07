@@ -38,11 +38,15 @@ fn written_defaults_load_as_defaults() {
 
 #[test]
 fn existing_files_are_never_replaced() {
-    let dir = folder_with("[results]\nvisible = 3\n");
+    let dir = folder_with("[bar]\nvisible_results = 3\n");
     let written = write_defaults(dir.path()).unwrap();
     assert_eq!(written.len(), 2, "only the two themes");
     assert_eq!(
-        load(dir.path(), SystemMode::Dark).unwrap().config.results.visible,
+        load(dir.path(), SystemMode::Dark)
+            .unwrap()
+            .config
+            .bar
+            .visible_results,
         3
     );
 }
@@ -53,12 +57,12 @@ fn a_few_keys_are_enough() {
     let config = load(dir.path(), SystemMode::Dark).unwrap().config;
     assert_eq!(config.behavior.escape, Escape::ClearThenClose);
     assert_eq!(config.layout.rows, Rows::Double);
-    assert_eq!(config.results, Results::default());
+    assert_eq!(config.bar, BarSettings::default());
 }
 
 #[rstest]
-#[case(SystemMode::Dark, "Dark")]
-#[case(SystemMode::Light, "Light")]
+#[case(SystemMode::Dark, "Default Dark")]
+#[case(SystemMode::Light, "Default Light")]
 fn system_theme_follows_the_desktop(#[case] mode: SystemMode, #[case] name: &str) {
     let dir = TempDir::new().unwrap();
     assert_eq!(load(dir.path(), mode).unwrap().theme.name, name);
@@ -67,26 +71,29 @@ fn system_theme_follows_the_desktop(#[case] mode: SystemMode, #[case] name: &str
 #[test]
 fn a_named_theme_ignores_the_desktop() {
     let dir = folder_with("[appearance]\ntheme = \"light\"\n");
-    assert_eq!(load(dir.path(), SystemMode::Dark).unwrap().theme.name, "Light");
+    assert_eq!(
+        load(dir.path(), SystemMode::Dark).unwrap().theme.name,
+        "Default Light"
+    );
 }
 
 #[test]
 fn appearance_overrides_the_theme() {
-    let dir = folder_with("[appearance]\nfont_size = 20\nfont_family = \"Cantarell\"\nicons = \"none\"\n");
+    let dir = folder_with("[appearance]\nfont_family = \"Cantarell\"\nicons = \"none\"\n");
     let theme = load(dir.path(), SystemMode::Dark).unwrap().theme;
-    assert_eq!(theme.font.size, 20);
     assert_eq!(theme.font.family, "Cantarell");
     assert_eq!(theme.icons.set, IconSet::None);
 }
 
 #[rstest]
-#[case("[window]\nwidht = 700\n", 2, "widht")]
-#[case("[windwo]\nwidth = 700\n", 1, "windwo")]
+#[case("[bar]\nwidht = 700\n", 2, "widht")]
+#[case("[barr]\nwidth = 700\n", 1, "barr")]
 #[case("[layout]\nrows = \"triple\"\n", 2, "triple")]
-#[case("[results]\nvisible = \"eight\"\n", 2, "eight")]
-#[case("[results\nvisible = 8\n", 1, "")]
-#[case("\n\n[results]\nvisible = 0\n", 4, "results.visible")]
-#[case("[results]\nvisible = 20\nmax = 10\n", 3, "results.max")]
+#[case("[bar]\nvisible_results = \"eight\"\n", 2, "eight")]
+#[case("[bar\nvisible_results = 8\n", 1, "")]
+#[case("\n\n[bar]\nvisible_results = 0\n", 4, "bar.visible_results")]
+#[case("[bar]\nvisible_results = 20\nmax_results = 10\n", 3, "bar.max_results")]
+#[case("[bar]\nfont_size = 100\n", 2, "bar.font_size")]
 #[case("[window]\ntop = 2.0\n", 2, "window.top")]
 fn problems_are_errors_with_their_line(#[case] config: &str, #[case] line: usize, #[case] mentions: &str) {
     let dir = folder_with(config);

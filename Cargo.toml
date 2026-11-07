@@ -23,6 +23,8 @@ notify-debouncer-full = "0.7"
 serde = { version = "1.0", features = ["derive"] }
 toml = "1.2"
 dirs = "7.0"
+winit = { version = "0.30", default-features = false }
+eframe = { version = "0.37", default-features = false, features = ["glow", "x11", "wayland", "accesskit", "default_fonts", "clipboard"] }
 
 # Tests
 rstest = "0.28"
@@ -30,6 +32,7 @@ proptest = "1.12"
 insta = "1.49"
 assert_fs = "1.1"
 divan = "0.1"
+egui_kittest = { version = "0.37", features = ["wgpu", "snapshot"] }
 
 [workspace.lints.rust]
 unsafe_code = "deny"
@@ -39,11 +42,19 @@ missing_docs = "warn"
 pedantic = { level = "warn", priority = -1 }
 module_name_repetitions = "allow"
 
+# Everyday optimized builds: `cargo run --release`. Fast to rebuild (a second or two).
 [profile.release]
-lto = true
-codegen-units = 1
+incremental = true
 strip = true
 panic = "abort"
+
+# Published executables: `cargo build --profile dist` (target/dist/serafind). Slower to build,
+# smaller and slightly faster.
+[profile.dist]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+incremental = false
 
 # Snapshot tests run faster with an optimized insta/similar.
 [profile.dev.package.insta]

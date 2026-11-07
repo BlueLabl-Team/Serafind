@@ -13,16 +13,30 @@ dark_theme = "dark"
 light_theme = "light"
 # Override the theme's font and icons (remove the # to use them).
 # font_family = "Inter"   # "Inter" (built in), an installed font name, or a .ttf / .otf path
-# font_size = 15
 # icons = "phosphor"      # "phosphor" or "none"
 
-[window]
-# Width of the bar, in logical pixels.
+[bar]
+# Dimensions of the bar, in logical pixels, whatever the theme.
 width = 680
+padding = 10
+# Height of a result row.
+row_height = 34
+# Text size; the search input is a little larger.
+font_size = 14
+# Rows shown before scrolling, and results kept at most.
+visible_results = 8
+max_results = 50
+
+[window]
+# Where the bar appears.
 # Distance from the top of the screen, as a fraction of its height (0.0 = top, 0.5 = middle).
 top = 0.25
 # Screen where the bar opens: "mouse" (the screen under the mouse pointer) or "primary".
 screen = "mouse"
+# Linux only. "wayland": keyboard focus and sharp text, but on a Wayland desktop the desktop
+# chooses where the bar appears (GNOME centers it). "x11" goes through XWayland: exact position
+# (top, screen), but GNOME may not give it the keyboard focus.
+backend = "wayland"
 
 [layout]
 # Mode selector: "dropdown" (discreet, at the right of the input) or "tabs" (always shown above).
@@ -41,12 +55,6 @@ hide_on_focus_loss = true
 keep_last_query = false
 # Escape key: "close", or "clear-then-close" (a first Escape clears the search).
 escape = "close"
-
-[results]
-# Rows shown before scrolling.
-visible = 8
-# Results kept at most (scrolling).
-max = 50
 
 [index]
 # Folders indexed. "~" is the home folder.

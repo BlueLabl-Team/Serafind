@@ -207,6 +207,35 @@ impl Matcher {
         partial
     }
 
+    /// Which characters of the name to highlight (indices of `char`s, sorted, without repeats):
+    /// where each word was found, or the letters the fuzzy matching used. Meant for the few
+    /// results shown, not for every candidate.
+    pub fn highlights(&mut self, candidate: &Candidate<'_>, fuzzy: bool) -> Vec<usize> {
+        let mut chars = Vec::new();
+        if fuzzy {
+            let haystack = Utf32Str::new(candidate.name, &mut self.buffer);
+            let mut indices = Vec::new();
+            for atom in &self.fuzzy_atoms {
+                atom.indices(haystack, &mut self.fuzzy, &mut indices);
+            }
+            chars.extend(indices.into_iter().map(|index| index as usize));
+        } else {
+            for word in &self.words {
+                if let Word::Text(needle) = word {
+                    let folded = candidate.folded(needle.case());
+                    if let Some(at) = folded.find(needle.folded()) {
+                        // Folding keeps one char per char: count chars to find the position.
+                        let start = folded[..at].chars().count();
+                        chars.extend(start..start + needle.folded().chars().count());
+                    }
+                }
+            }
+        }
+        chars.sort_unstable();
+        chars.dedup();
+        chars
+    }
+
     fn passes_filters(&self, candidate: &Candidate<'_>) -> bool {
         let kind_fits = match self.mode {
             SearchMode::All => true,

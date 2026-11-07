@@ -1,46 +1,57 @@
-# Serafind theme: Light.
+# Serafind theme: Default Light (the colors of PowerHive's Default Light theme).
 #
 # Copy this file under another name in the same folder to make your own theme, then choose it
 # in config.toml (theme = "file-name-without-toml"). A theme can start from another one with
 # extends = "light" and give only the values it changes. Colors are "#rrggbb" or "#rrggbbaa".
 
-name = "Light"
+name = "Default Light"
+mode = "light"           # "dark" or "light"
 
 [colors]
-background = "#f9f9f9"   # the bar
-surface = "#ffffff"      # the input, a hovered row
-border = "#e0e0e0"
-text = "#1a1a1a"
-text_muted = "#616161"   # folders, hints, counters
-accent = "#005fb8"       # caret, active mode, focus
-selection = "#005fb81f"  # the selected row
-highlight = "#005fb8"    # matched letters
-chip = "#ebebeb"
-chip_text = "#262626"
-error = "#c42b1c"        # chips that cannot be used, settings errors
-shadow = "#00000033"
+primary = "#4C4C9D"
+secondary = "#712F79"
+tertiary = "#976391"
+accent = "#C85A2C"           # border of the bar, search icon, folders, matched letters
+danger = "#883007"
 
+background = "#DEDAE5"
+surface = "#E7E4EC"
+surface_elevated = "#DCD8E3" # the bar
+surface_hover = "#D0CBDA"    # a hovered row, an excluded chip
+
+text_primary = "#322E40"
+text_secondary = "#544E62"   # folders, hints, counters, icons
+text_disabled = "#96909F"    # placeholder, completion
+border = "#BCB6C8"           # separators
+
+selection = "#C6C6E2"        # the selected row, chips
+focus = "#C85A2C"            # caret
+
+success = "#2E8B57"
+warning = "#B7791F"
+error = "#C0392B"            # chips that cannot be used, settings errors
+info = "#2F7DBF"
+
+# Sizes (bar width, padding, rows, text size) are in config.toml, section [bar].
 [font]
 family = "Inter"         # "Inter" (built in), an installed font name, or a .ttf / .otf path
-size = 15
 
 [shape]
-radius = 10              # corner radius of the bar, chips and rows
-padding = 10
-row_height = 36
+radius = 10              # corner radius of the bar (chips and rows use less)
 shadow = true
 
 [icons]
 set = "phosphor"         # "phosphor" or "none"
 
+# Icons use text_secondary, folders use accent. To color a kind of entry, remove the # :
 [icons.colors]
-folder = "#c98a00"
-document = "#2f6fb3"
-pdf = "#c4312b"
-image = "#2e8b4e"
-audio = "#8e44ad"
-video = "#b0651e"
-archive = "#707070"
-code = "#1f6fc5"
-app = "#005fb8"
-other = "#616161"
+# folder = "#C85A2C"
+# document = "#2F7DBF"
+# pdf = "#C0392B"
+# image = "#2E8B57"
+# audio = "#976391"
+# video = "#B7791F"
+# archive = "#544E62"
+# code = "#2F7DBF"
+# app = "#C85A2C"
+# other = "#544E62"
