@@ -29,6 +29,27 @@ pub struct Config {
     pub actions: Actions,
     /// The keys of the bar.
     pub keys: BarKeys,
+    /// The Content mode.
+    pub content: ContentSettings,
+}
+
+/// `[content]`: the search inside files.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ContentSettings {
+    /// Files larger than this (in megabytes) are not read.
+    pub max_file_size: u32,
+    /// The search starts after this pause in typing, in milliseconds.
+    pub typing_delay: u32,
+}
+
+impl Default for ContentSettings {
+    fn default() -> Self {
+        Self {
+            max_file_size: 10,
+            typing_delay: 250,
+        }
+    }
 }
 
 /// `[appearance]`.
@@ -198,12 +219,15 @@ pub enum Click {
 pub struct Actions {
     /// `"auto"`, or the terminal command; `{dir}` is replaced by the folder.
     pub terminal: String,
+    /// `"auto"`, or the command that opens a file at a line; `{file}` and `{line}` are replaced.
+    pub open_at_line: String,
 }
 
 impl Default for Actions {
     fn default() -> Self {
         Self {
             terminal: "auto".to_owned(),
+            open_at_line: "auto".to_owned(),
         }
     }
 }
@@ -525,6 +549,15 @@ impl Config {
                 Ok(_) => {}
                 Err(problem) => problems.push((key_setting(name), problem)),
             }
+        }
+        if self.actions.open_at_line.trim().is_empty() {
+            problems.push(("actions.open_at_line", "must be \"auto\" or a command".to_owned()));
+        }
+        if !(1..=1024).contains(&self.content.max_file_size) {
+            problems.push(("content.max_file_size", "must be between 1 and 1024".to_owned()));
+        }
+        if self.content.typing_delay > 2000 {
+            problems.push(("content.typing_delay", "must be between 0 and 2000".to_owned()));
         }
         if self.actions.terminal.trim().is_empty() {
             problems.push(("actions.terminal", "must be \"auto\" or a command".to_owned()));

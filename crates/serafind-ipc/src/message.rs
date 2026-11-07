@@ -64,6 +64,11 @@ pub enum Action {
     Terminal,
     /// Start an application; the path is the id of [`Row::app`].
     Launch,
+    /// Open a text file at a line (Content mode), with an editor that can, else like `Open`.
+    OpenAtLine {
+        /// The line, from 1.
+        line: u32,
+    },
 }
 
 /// The answer to a [`Request`].
@@ -182,10 +187,30 @@ pub struct Row {
     /// For an application: its icon file (PNG or SVG).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    /// Content mode: the first line of the file that matches.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<Line>,
+}
+
+/// A line of a file found in the Content mode.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Line {
+    /// Line number, from 1.
+    pub number: u32,
+    /// The line, shortened around the match.
+    pub text: String,
+    /// Characters of `text` that match.
+    pub highlights: Vec<u32>,
+    /// Matching lines in the file.
+    pub count: u32,
 }
 
 /// Answer to a search.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent facts shown in the footer"
+)]
 pub struct Results {
     /// The mode the search ran in (a mode filter of the line wins over the asked mode).
     pub mode: Option<Mode>,
@@ -199,6 +224,15 @@ pub struct Results {
     pub outside_index: bool,
     /// The index is still being built.
     pub indexing: bool,
+    /// Content mode: files are still being read; ask again for more.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub searching: bool,
+    /// Content mode: how much of the files was read, in percent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<u8>,
+    /// Why the search could not run (a bad `re:` expression...).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub problem: Option<String>,
 }
 
 #[cfg(test)]
@@ -236,6 +270,7 @@ mod tests {
                 highlights: vec![0, 1],
                 app: None,
                 icon: None,
+                line: None,
             }],
             total: 1,
             ..Results::default()

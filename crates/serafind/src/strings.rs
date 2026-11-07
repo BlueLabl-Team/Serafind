@@ -28,6 +28,8 @@ pub struct Strings {
     pub path_copied: &'static str,
     /// The name was copied.
     pub name_copied: &'static str,
+    /// Footer while files are read (Content mode), `{percent}` replaced.
+    pub searching: &'static str,
     /// Prefix of a settings error.
     pub settings_error: &'static str,
     /// Prefix of a global shortcut problem.
@@ -77,6 +79,7 @@ impl Strings {
         unreachable: "Serafind is not running",
         path_copied: "Path copied",
         name_copied: "Name copied",
+        searching: "Searching inside files… {percent}%",
         settings_error: "Settings not applied",
         no_shortcut: "No global shortcut",
         one_result: "1 result",

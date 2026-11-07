@@ -8,6 +8,7 @@ mod app;
 mod app_icon;
 mod bar;
 mod completion;
+mod content;
 mod daemon;
 mod desktop;
 mod format;
