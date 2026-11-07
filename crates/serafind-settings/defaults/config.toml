@@ -75,6 +75,9 @@ exclude_paths = []
 hidden_folders = false
 
 [shortcut]
+# Serafind sets up the global shortcut itself. Set to false to bind `serafind toggle` to a key
+# in your desktop's keyboard settings instead.
+enabled = true
 # Global shortcut that opens and closes the bar: modifiers (Ctrl, Alt, Shift, Super) and a key,
 # joined with "+". Super is the Windows / logo key.
 toggle = "Super+F"

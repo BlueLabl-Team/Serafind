@@ -15,6 +15,7 @@ use serafind_ipc::{
 use serafind_settings::{IndexSettings, Settings, SettingsWatcher, SystemMode};
 
 use crate::search::{SharedIndex, from_wire_mode, search_index, understand};
+use crate::shortcut::{Shortcut, ShortcutState};
 
 /// How long a bar process may take to connect before another one may be started.
 const BAR_START_TIMEOUT: Duration = Duration::from_secs(5);
@@ -33,6 +34,11 @@ pub fn run(settings_dir: Option<PathBuf>, home: PathBuf) -> io::Result<()> {
     let listener = Listener::bind()?;
     eprintln!("serafind: listening at {}", listener.location());
 
+    match crate::desktop::install_desktop_file() {
+        Ok(Some(path)) => eprintln!("serafind: desktop entry written: {}", path.display()),
+        Ok(None) => {}
+        Err(error) => eprintln!("serafind: cannot write the desktop entry: {error}"),
+    }
     let settings = load_settings(settings_dir.as_deref());
     let daemon = Arc::new(Daemon {
         home,
@@ -42,8 +48,12 @@ pub fn run(settings_dir: Option<PathBuf>, home: PathBuf) -> io::Result<()> {
         index_settings: Mutex::new(settings.config.index.clone()),
         bar: Mutex::new(BarState::default()),
         quitting: AtomicBool::new(false),
+        shortcut: Mutex::new(None),
+        shortcut_keys: Mutex::new(String::new()),
+        shortcut_state: Arc::new(Mutex::new(ShortcutState::default())),
     });
     daemon.start_index(&settings.config.index);
+    daemon.start_shortcut(&settings.config.shortcut);
     let _watcher = daemon.watch_settings();
 
     while !daemon.quitting.load(Ordering::Acquire) {
@@ -56,6 +66,7 @@ pub fn run(settings_dir: Option<PathBuf>, home: PathBuf) -> io::Result<()> {
         }
     }
     daemon.bar.lock().expect("bar lock").send(&Event::Quit);
+    drop(daemon.shortcut.lock().expect("shortcut lock").take());
     eprintln!("serafind: stopped");
     Ok(())
 }
@@ -69,6 +80,10 @@ struct Daemon {
     index_settings: Mutex<IndexSettings>,
     bar: Mutex<BarState>,
     quitting: AtomicBool,
+    /// The global shortcut; replaced when `[shortcut]` changes.
+    shortcut: Mutex<Option<Shortcut>>,
+    shortcut_keys: Mutex<String>,
+    shortcut_state: Arc<Mutex<ShortcutState>>,
 }
 
 /// What the resident process knows of the bar process.
@@ -133,12 +148,7 @@ impl Daemon {
     fn answer(&self, request: Request, id: u64, writer: &Arc<Mutex<Stream>>) -> Response {
         match request {
             Request::Toggle { activation_token } => {
-                let visible = self.bar.lock().expect("bar lock").visible;
-                if visible {
-                    self.hide();
-                } else {
-                    self.show(activation_token);
-                }
+                self.toggle(activation_token);
                 Response::Ok
             }
             Request::Show { activation_token } => {
@@ -169,6 +179,60 @@ impl Daemon {
                 Response::Ok
             }
         }
+    }
+
+    fn toggle(&self, activation_token: Option<String>) {
+        let visible = self.bar.lock().expect("bar lock").visible;
+        if visible {
+            self.hide();
+        } else {
+            self.show(activation_token);
+        }
+    }
+
+    /// Sets up the global shortcut (again when it changed in the settings).
+    fn start_shortcut(self: &Arc<Self>, settings: &serafind_settings::Shortcut) {
+        let text = if settings.enabled {
+            settings.for_this_system()
+        } else {
+            ""
+        };
+        let mut keys_in_use = self.shortcut_keys.lock().expect("shortcut lock");
+        if *keys_in_use == text {
+            return;
+        }
+        text.clone_into(&mut keys_in_use);
+        let mut slot = self.shortcut.lock().expect("shortcut lock");
+        // Release the old keys first.
+        drop(slot.take());
+        if let Ok(mut state) = self.shortcut_state.lock() {
+            *state = ShortcutState::default();
+            if !settings.enabled {
+                state.problem = Some("turned off in config.toml ([shortcut] enabled = false)".to_owned());
+                return;
+            }
+        }
+        let keys = match serafind_settings::Keys::parse(text) {
+            Ok(keys) => keys,
+            Err(problem) => {
+                // config.toml is refused in that case: the bar shows why.
+                if let Ok(mut state) = self.shortcut_state.lock() {
+                    state.problem = Some(format!("shortcut {text:?} {problem}"));
+                }
+                return;
+            }
+        };
+        let daemon = Arc::downgrade(self);
+        let on_press: crate::shortcut::OnPress = Arc::new(move |token| {
+            if let Some(daemon) = daemon.upgrade() {
+                daemon.toggle(token);
+            }
+        });
+        *slot = Some(crate::shortcut::start(
+            keys,
+            Arc::clone(&self.shortcut_state),
+            on_press,
+        ));
     }
 
     fn show(&self, activation_token: Option<String>) {
@@ -207,7 +271,10 @@ impl Daemon {
             // winit hands it to the compositor so that the new window gets the focus.
             command.env("XDG_ACTIVATION_TOKEN", token);
         }
-        command.spawn().map(drop)
+        let mut child = command.spawn()?;
+        // Collect it when it ends, so that it does not linger as a zombie process.
+        std::thread::spawn(move || child.wait());
+        Ok(())
     }
 
     fn status(&self) -> Status {
@@ -217,6 +284,11 @@ impl Daemon {
             .and_then(|index| index.read().ok().map(|index| index.len() as u64))
             .unwrap_or(0);
         let bar = self.bar.lock().expect("bar lock");
+        let shortcut = self
+            .shortcut_state
+            .lock()
+            .map(|state| state.clone())
+            .unwrap_or_default();
         Status {
             pid: std::process::id(),
             version: env!("CARGO_PKG_VERSION").to_owned(),
@@ -225,6 +297,8 @@ impl Daemon {
             entries,
             bar_running: bar.link.is_some(),
             bar_visible: bar.visible,
+            shortcut: shortcut.active,
+            shortcut_problem: shortcut.problem,
         }
     }
 
@@ -287,6 +361,7 @@ impl Daemon {
                 eprintln!("serafind: indexed folders changed, indexing again");
                 daemon.start_index(&settings.config.index);
             }
+            daemon.start_shortcut(&settings.config.shortcut);
         })
         .ok()
     }

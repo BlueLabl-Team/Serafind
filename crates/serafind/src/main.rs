@@ -7,9 +7,11 @@ mod app;
 mod bar;
 mod completion;
 mod daemon;
+mod desktop;
 mod format;
 mod icons;
 mod search;
+mod shortcut;
 mod strings;
 mod style;
 
@@ -34,6 +36,7 @@ Commands:
   status    Show whether Serafind runs, and its index
   quit      Stop Serafind
   daemon    Run Serafind in this terminal (for debugging)
+  uninstall Stop Serafind and remove its desktop entry (settings are kept)
 
 Options:
   --settings <folder>  Use another settings folder (default: ~/.config/serafind)
@@ -50,6 +53,7 @@ enum Command {
     Quit,
     Daemon,
     Bar,
+    Uninstall,
 }
 
 fn main() -> ExitCode {
@@ -80,6 +84,7 @@ fn main() -> ExitCode {
             "quit" => Command::Quit,
             "daemon" => Command::Daemon,
             "bar" => Command::Bar,
+            "uninstall" => Command::Uninstall,
             other => return usage_error(&format!("unknown argument {other:?}")),
         };
     }
@@ -97,6 +102,19 @@ fn main() -> ExitCode {
         );
     }
 
+    run(command, settings_dir, home)
+}
+
+/// The Wayland activation token this command was started with (a desktop shortcut gives one):
+/// passed on to the bar so that its window gets the keyboard focus.
+fn activation_token() -> Option<String> {
+    std::env::var("XDG_ACTIVATION_TOKEN")
+        .ok()
+        .filter(|token| !token.is_empty())
+}
+
+/// Runs a command once the arguments are read.
+fn run(command: Command, settings_dir: Option<PathBuf>, home: PathBuf) -> ExitCode {
     match command {
         Command::Daemon => match daemon::run(settings_dir, home) {
             Ok(()) => ExitCode::SUCCESS,
@@ -106,6 +124,23 @@ fn main() -> ExitCode {
             }
         },
         Command::Bar => run_bar(settings_dir, home),
+        Command::Uninstall => {
+            if let Ok(mut client) = Client::connect() {
+                let _ = client.call(&Request::Quit);
+            }
+            match desktop::uninstall_desktop_file() {
+                Ok(Some(path)) => println!("Removed {}.", path.display()),
+                Ok(None) => println!("No desktop entry to remove."),
+                Err(error) => {
+                    eprintln!("serafind: {error}");
+                    return ExitCode::FAILURE;
+                }
+            }
+            if let Some(dir) = &settings_dir {
+                println!("Settings are kept in {}.", dir.display());
+            }
+            ExitCode::SUCCESS
+        }
         Command::Start => match Client::connect() {
             Ok(mut client) => send(
                 &mut client,
@@ -150,14 +185,6 @@ fn main() -> ExitCode {
     }
 }
 
-/// The Wayland activation token this command was started with (a desktop shortcut gives one):
-/// passed on to the bar so that its window gets the keyboard focus.
-fn activation_token() -> Option<String> {
-    std::env::var("XDG_ACTIVATION_TOKEN")
-        .ok()
-        .filter(|token| !token.is_empty())
-}
-
 fn usage_error(message: &str) -> ExitCode {
     eprintln!("serafind: {message}\n\n{HELP}");
     ExitCode::from(2)
@@ -185,6 +212,11 @@ fn send(client: &mut Client, request: &Request) -> ExitCode {
                 (false, false) => "closed",
             };
             println!("Bar: {bar}.");
+            match (&status.shortcut, &status.shortcut_problem) {
+                (_, Some(problem)) => println!("Shortcut: none: {problem}."),
+                (Some(shortcut), None) => println!("Shortcut: {shortcut}."),
+                (None, None) => println!("Shortcut: being set up."),
+            }
             ExitCode::SUCCESS
         }
         Ok(other) => {
@@ -253,7 +285,9 @@ fn start_in_background(settings_dir: Option<&Path>, show: bool) -> ExitCode {
             },
         );
     }
-    println!("Serafind started. Open the bar with `serafind toggle` (the global shortcut comes soon).");
+    println!(
+        "Serafind started. Open the bar with the global shortcut (see `serafind status`) or `serafind toggle`."
+    );
     if let Some(path) = log_path {
         println!("Log: {}", path.display());
     }
@@ -298,7 +332,7 @@ fn run_bar(settings_dir: Option<PathBuf>, home: PathBuf) -> ExitCode {
         Some(Err(error)) => (Settings::defaults(SystemMode::Dark), Some(error.to_string())),
         None => (Settings::defaults(SystemMode::Dark), None),
     };
-    let client = match Client::connect() {
+    let mut client = match Client::connect() {
         Ok(client) => client,
         Err(error) => {
             eprintln!("serafind: the bar needs Serafind running ({error}); start it with `serafind`");
@@ -306,11 +340,17 @@ fn run_bar(settings_dir: Option<PathBuf>, home: PathBuf) -> ExitCode {
         }
     };
 
+    // Shown in the bar's footer when the global shortcut could not be set up.
+    let shortcut_problem = match client.call(&Request::Status) {
+        Ok(Response::Status(status)) => status.shortcut_problem,
+        _ => None,
+    };
+
     let window = &settings.config.window;
     let width = f32::from(settings.config.bar.width) + 2.0 * f32::from(app::SHADOW_MARGIN);
     let viewport = egui::ViewportBuilder::default()
         .with_title("Serafind")
-        .with_app_id("serafind")
+        .with_app_id(desktop::APP_ID)
         .with_decorations(false)
         .with_transparent(true)
         // Not "false": on Wayland that freezes the size at creation and the bar could not grow.
@@ -340,12 +380,15 @@ fn run_bar(settings_dir: Option<PathBuf>, home: PathBuf) -> ExitCode {
             };
             Ok(Box::new(app::App::new(
                 &creation.egui_ctx,
-                settings,
-                settings_error,
-                settings_dir,
-                search::Searcher::remote(client, home),
-                link,
-                !wayland,
+                app::Startup {
+                    settings,
+                    settings_error,
+                    settings_dir,
+                    searcher: search::Searcher::remote(client, home),
+                    link,
+                    can_hide: !wayland,
+                    shortcut_problem,
+                },
             )))
         }),
     );

@@ -92,6 +92,12 @@ pub struct Status {
     pub bar_running: bool,
     /// The bar is shown.
     pub bar_visible: bool,
+    /// The global shortcut in use, as the desktop describes it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shortcut: Option<String>,
+    /// Why there is no global shortcut, and what to do.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shortcut_problem: Option<String>,
 }
 
 /// The modes of the bar.
