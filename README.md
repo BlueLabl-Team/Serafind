@@ -56,7 +56,18 @@ serafind hide       # close the bar
 serafind status     # is it running? how big is the index?
 serafind quit       # stop Serafind
 serafind daemon     # run in this terminal, to see its messages
+serafind uninstall  # remove what Serafind added to the desktop (its .desktop file)
 ```
+
+### Global shortcut
+
+`Super+F` (the Windows / logo key and F) opens and closes the bar. Change it with `[shortcut] toggle` in `config.toml`; it applies without restarting.
+
+- **Wayland (GNOME, KDE):** Serafind asks the desktop through the `GlobalShortcuts` portal. The first time, the desktop asks you to accept the shortcut, and may let you pick another key. The desktop has the last word: the key it gave is shown by `serafind status`, and can be changed in its keyboard settings.
+- **X11 and Windows:** Serafind registers the shortcut itself.
+- **When it fails** (key taken, no portal), the reason is shown by `serafind status`, at the bottom of the bar and in a notification. Then bind `serafind toggle` to a key in your desktop's keyboard settings, and set `[shortcut] enabled = false`.
+
+On Linux, Serafind writes `~/.local/share/applications/io.github.bluelabl_team.Serafind.desktop`: the portal needs it to know the application.
 
 Messages of the background process go to `~/.local/state/serafind/serafind.log` (Linux) or the local application data folder (Windows).
 
@@ -129,7 +140,7 @@ You need Rust (latest stable) and Git.
 ```bash
 git clone git@github.com:BlueLabl-Team/Serafind.git
 cd Serafind
-cargo run --release -p serafind  # opens the bar (the global shortcut comes later)
+cargo run --release -p serafind  # starts Serafind; then press Super+F
 cargo build --profile dist       # smallest executable, for publishing: target/dist/serafind
 cargo test --workspace         # or: cargo nextest run --workspace
 cargo insta review             # review changed snapshots
@@ -144,7 +155,7 @@ cargo insta review             # review changed snapshots
 | 2 | `index`: parallel first walk, filesystem watching, exclusions, benchmarks | ✅ |
 | 3 | Settings and themes (TOML, defaults, validation, live reload) | ✅ |
 | 3 | Search bar (egui): input, chips, results, keyboard navigation, `in:` completion | ✅ |
-| 4 | Resident process: single instance, `serafind toggle`, global shortcut (X11, Windows, Wayland portal), tray icon | 🚧 |
+| 4 | Resident process: single instance, `serafind toggle`, global shortcut (X11, Windows, Wayland portal) ✅, tray icon | 🚧 |
 | 4b | Choose where the bar appears on Wayland (layer-shell, focus on X11, or another way: to be decided) | ⬜ |
 | 5 | Actions: open, show in the file manager, copy the path | ⬜ |
 | 6 | Apps mode: `.desktop` files (Linux), Start menu shortcuts (Windows) | ⬜ |
@@ -152,6 +163,10 @@ cargo insta review             # review changed snapshots
 | 8 | Start with the session; settings for indexed and excluded folders applied live | ⬜ |
 | 9 | GitHub Actions: build, tests, releases (Linux and Windows executables) | ⬜ |
 | 10 | Integration in third-party software through their plugin / extension systems (library, IPC protocol or C ABI: to be decided) | ⬜ |
+
+## Known issues
+
+- **GNOME 48 says the shortcut failed when it worked.** When an application asks again for a shortcut it already holds, `xdg-desktop-portal-gnome` 48 binds it but answers `BindShortcuts` with a failure. Serafind then asks the portal which shortcuts it really holds (`ListShortcuts`) before reporting a problem. If `serafind status` shows an error while the key works, the workaround did not apply: please open an issue with the output of `serafind status`.
 
 ## License
 

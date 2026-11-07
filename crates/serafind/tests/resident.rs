@@ -14,6 +14,7 @@ use serafind_ipc::{Mode, Request, Response, SOCKET_VARIABLE};
 struct Instance {
     _folder: TempDir,
     settings: PathBuf,
+    data_home: PathBuf,
     socket: PathBuf,
 }
 
@@ -30,13 +31,18 @@ impl Instance {
         let data = folder.path().join("data");
         std::fs::write(
             settings.join("config.toml"),
-            format!("[index]\nroots = [{:?}]\n", data.to_string_lossy()),
+            format!(
+                "[index]\nroots = [{:?}]\n[shortcut]\nenabled = false\n",
+                data.to_string_lossy()
+            ),
         )
         .unwrap();
         let socket = std::env::temp_dir().join(format!("sf-{name}-{}.sock", std::process::id()));
+        let data_home = folder.path().join("share");
         Self {
             _folder: folder,
             settings,
+            data_home,
             socket,
         }
     }
@@ -47,6 +53,8 @@ impl Instance {
             .arg("--settings")
             .arg(&self.settings)
             .env(SOCKET_VARIABLE, &self.socket)
+            // The desktop entry goes into the test folder, not the real home folder.
+            .env("XDG_DATA_HOME", &self.data_home)
             .output()
             .unwrap()
     }

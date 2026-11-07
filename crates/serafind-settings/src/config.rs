@@ -181,6 +181,8 @@ pub struct IndexSettings {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Shortcut {
+    /// Serafind sets up the global shortcut itself (false: bind `serafind toggle` in the desktop).
+    pub enabled: bool,
     /// The shortcut, e.g. `Super+F`.
     pub toggle: String,
     /// Replaces `toggle` on Windows.
@@ -287,6 +289,7 @@ impl Default for IndexSettings {
 impl Default for Shortcut {
     fn default() -> Self {
         Self {
+            enabled: true,
             toggle: "Super+F".to_owned(),
             windows: None,
             linux: None,
@@ -346,11 +349,16 @@ impl Config {
             "index.roots",
             "needs at least one folder",
         );
-        check(
-            !self.shortcut.for_this_system().trim().is_empty(),
-            "shortcut.toggle",
-            "must not be empty",
-        );
+        let shortcut_key = if cfg!(windows) && self.shortcut.windows.is_some() {
+            "shortcut.windows"
+        } else if cfg!(target_os = "linux") && self.shortcut.linux.is_some() {
+            "shortcut.linux"
+        } else {
+            "shortcut.toggle"
+        };
+        if let Err(problem) = crate::Keys::parse(self.shortcut.for_this_system()) {
+            problems.push((shortcut_key, problem));
+        }
         problems
     }
 }

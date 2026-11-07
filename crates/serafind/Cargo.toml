@@ -19,6 +19,14 @@ eframe.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 winit.workspace = true
+ashpd.workspace = true
+futures-lite.workspace = true
+global-hotkey.workspace = true
+async-io.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+global-hotkey.workspace = true
+windows-sys.workspace = true
 
 [dev-dependencies]
 serafind-ipc.workspace = true
