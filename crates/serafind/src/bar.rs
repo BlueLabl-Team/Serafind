@@ -43,6 +43,8 @@ pub struct Bar {
     outcome: Outcome,
     /// What `outcome` was computed for: line, tab, maximum.
     searched: Option<(String, SearchMode, usize)>,
+    /// The line and tab of the last search, to keep the selection when it runs again.
+    last_search: Option<(String, SearchMode)>,
     selected: usize,
     scroll_to_selected: bool,
     completions: Vec<String>,
@@ -52,8 +54,6 @@ pub struct Bar {
     requests: Vec<Request>,
     focus_input: bool,
     bindings: Bindings,
-    /// A copy key was handled in this frame.
-    copied: bool,
 }
 
 const INPUT_ID: &str = "serafind-input";
@@ -64,7 +64,6 @@ impl Bar {
     pub fn new(settings: Settings, searcher: Searcher) -> Self {
         Self {
             bindings: Bindings::new(&settings.config.keys),
-            copied: false,
             settings,
             strings: Strings::ENGLISH,
             searcher,
@@ -72,6 +71,7 @@ impl Bar {
             tab: SearchMode::All,
             outcome: Outcome::default(),
             searched: None,
+            last_search: None,
             selected: 0,
             scroll_to_selected: false,
             completions: Vec::new(),
@@ -169,6 +169,7 @@ impl Bar {
         self.notice = None;
         self.focus_input = true;
         self.searched = None;
+        self.last_search = None;
     }
 
     /// Draws the bar and handles its keys.
@@ -228,9 +229,16 @@ impl Bar {
         } else {
             self.searched = Some(key);
         }
-        self.selected = 0;
-        self.scroll_to_selected = true;
-        self.notice = None;
+        // The same search again (settings reloaded, index ready): keep the selection.
+        let same_search = self.last_search.as_ref() == Some(&(self.line.clone(), self.tab));
+        if same_search {
+            self.selected = self.selected.min(self.outcome.rows.len().saturating_sub(1));
+        } else {
+            self.selected = 0;
+            self.scroll_to_selected = true;
+            self.notice = None;
+            self.last_search = Some((self.line.clone(), self.tab));
+        }
         self.update_completions();
     }
 
@@ -265,7 +273,7 @@ impl Bar {
                 Command::CopyPath | Command::CopyName => Self::input_has_no_selection(ctx),
                 _ => true,
             };
-            if applies && ctx.input_mut(|input| input.consume_key(modifiers, key)) {
+            if applies && Self::pressed(ctx, modifiers, key) {
                 self.run(ctx, command, rows, page);
             }
         }
@@ -279,13 +287,31 @@ impl Bar {
                 self.act(index, Action::Open);
             }
         }
-        ctx.input_mut(|input| {
-            // Copy shortcuts arrive as events too: drop it once handled above.
-            if self.copied {
-                input.events.retain(|event| !matches!(event, egui::Event::Copy));
+    }
+
+    /// Whether `modifiers` + `key` was pressed (and takes it). In the real window Ctrl+C and
+    /// Ctrl+X do not arrive as keys but as Copy and Cut events: those count for them.
+    fn pressed(ctx: &egui::Context, modifiers: egui::Modifiers, key: egui::Key) -> bool {
+        let as_event = if modifiers == egui::Modifiers::COMMAND {
+            match key {
+                egui::Key::C => Some(egui::Event::Copy),
+                egui::Key::X => Some(egui::Event::Cut),
+                _ => None,
             }
-        });
-        self.copied = false;
+        } else {
+            None
+        };
+        ctx.input_mut(|input| {
+            if input.consume_key(modifiers, key) {
+                return true;
+            }
+            let Some(wanted) = as_event else {
+                return false;
+            };
+            let before = input.events.len();
+            input.events.retain(|event| *event != wanted);
+            input.events.len() != before
+        })
     }
 
     fn run(&mut self, ctx: &egui::Context, command: Command, rows: usize, page: usize) {
@@ -342,7 +368,6 @@ impl Bar {
             ctx.copy_text(row.path.display().to_string());
             self.notice = Some(self.strings.path_copied.to_owned());
         }
-        self.copied = true;
         if self.settings.config.behavior.close_after_copy {
             self.requests.push(Request::Close);
         }
