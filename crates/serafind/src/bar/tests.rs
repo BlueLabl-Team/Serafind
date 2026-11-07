@@ -193,6 +193,29 @@ fn copy_keys_copy_the_path_or_the_name() {
 }
 
 #[test]
+fn the_copy_event_of_the_window_copies_the_path() {
+    // The real window sends Ctrl+C as a Copy event, not as a key.
+    let mut harness = default_harness();
+    type_text(&mut harness, "readme");
+    harness.event(egui::Event::Copy);
+    harness.run();
+    assert_eq!(harness.state().notice(), Some("Path copied"));
+}
+
+#[test]
+fn the_selection_stays_when_the_settings_are_reloaded() {
+    let mut harness = default_harness();
+    type_text(&mut harness, "fact");
+    press(&mut harness, Modifiers::NONE, Key::ArrowDown);
+    let settings = harness.state().settings().clone();
+    harness.state_mut().set_settings(settings);
+    harness.run();
+    assert_eq!(harness.state().selected(), 1);
+    type_text(&mut harness, "u");
+    assert_eq!(harness.state().selected(), 0, "a new search starts at the top");
+}
+
+#[test]
 fn ctrl_t_opens_a_terminal() {
     let mut harness = default_harness();
     type_text(&mut harness, "readme");
