@@ -21,7 +21,7 @@ pub use config::{
     Results, Rows, Screen, Shortcut, Window,
 };
 pub use error::SettingsError;
-pub use theme::{BUILT_IN, Color, Colors, Font, IconColors, Icons, Shape, Theme};
+pub use theme::{BUILT_IN, Color, Colors, Font, IconColors, Icons, Shape, Theme, ThemeMode};
 pub use watch::SettingsWatcher;
 
 /// The commented `config.toml` written on first launch.

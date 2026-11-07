@@ -31,6 +31,7 @@ pub struct App {
     placed: bool,
     was_focused: bool,
     size: egui::Vec2,
+    ime: ImeFilter,
 }
 
 impl App {
@@ -75,6 +76,7 @@ impl App {
             placed: false,
             was_focused: false,
             size: egui::Vec2::ZERO,
+            ime: ImeFilter::default(),
         };
         app.update_problems();
         app
@@ -198,7 +200,41 @@ impl eframe::App for App {
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
         [0.0; 4]
     }
+
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        self.ime.filter(&mut raw_input.events);
+    }
 }
+
+/// Drops the empty input-method compositions some input methods (`IBus`) send again and again
+/// while nothing is being composed: each one would make egui draw a new frame, which makes the
+/// input method answer again, and the bar would never rest.
+#[derive(Debug, Default)]
+pub struct ImeFilter {
+    composing: bool,
+}
+
+impl ImeFilter {
+    /// Removes the empty compositions that do not end a composition.
+    pub fn filter(&mut self, events: &mut Vec<egui::Event>) {
+        events.retain(|event| match event {
+            egui::Event::Ime(egui::ImeEvent::Preedit { text, .. }) if text.is_empty() => {
+                // An empty composition only matters when it ends one in progress.
+                std::mem::replace(&mut self.composing, false)
+            }
+            egui::Event::Ime(egui::ImeEvent::Preedit { .. }) => {
+                self.composing = true;
+                true
+            }
+            egui::Event::Ime(egui::ImeEvent::Commit(_)) => {
+                self.composing = false;
+                true
+            }
+            _ => true,
+        });
+    }
+}
+
 
 /// A soft shadow behind the bar, drawn in the transparent margin.
 fn paint_shadow(ui: &egui::Ui, theme: &serafind_settings::Theme) {
@@ -208,7 +244,11 @@ fn paint_shadow(ui: &egui::Ui, theme: &serafind_settings::Theme) {
         offset: [0, 4],
         blur: 16,
         spread: 0,
-        color: crate::style::color(theme.colors.shadow),
+        color: if theme.mode == serafind_settings::ThemeMode::Dark {
+            egui::Color32::from_black_alpha(150)
+        } else {
+            egui::Color32::from_black_alpha(60)
+        },
     };
     ui.painter()
         .add(shadow.as_shape(rect, egui::CornerRadius::same(radius)));
@@ -278,5 +318,43 @@ pub fn expand_home(path: &str, home: &std::path::Path) -> PathBuf {
         home.join(rest)
     } else {
         PathBuf::from(path)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn preedit(text: &str) -> egui::Event {
+        egui::Event::Ime(egui::ImeEvent::Preedit {
+            text: text.to_owned(),
+            active_range_chars: None,
+        })
+    }
+
+    #[test]
+    fn idle_empty_compositions_are_dropped() {
+        let mut filter = ImeFilter::default();
+        for _ in 0..3 {
+            let mut events = vec![preedit("")];
+            filter.filter(&mut events);
+            assert!(events.is_empty());
+        }
+    }
+
+    #[test]
+    fn compositions_still_work() {
+        let mut filter = ImeFilter::default();
+        let mut events = vec![
+            preedit("^"),
+            egui::Event::Ime(egui::ImeEvent::Commit("ê".to_owned())),
+            preedit(""),
+        ];
+        filter.filter(&mut events);
+        assert_eq!(events.len(), 2, "the empty one after a commit is not needed");
+
+        let mut events = vec![preedit("^"), preedit("")];
+        filter.filter(&mut events);
+        assert_eq!(events.len(), 2, "an empty one cancelling a composition is kept");
     }
 }

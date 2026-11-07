@@ -139,8 +139,8 @@ impl Bar {
         let padding = i8::try_from(theme.shape.padding).unwrap_or(i8::MAX);
 
         egui::Frame::new()
-            .fill(color(colors.background))
-            .stroke(Stroke::new(1.0, color(colors.border)))
+            .fill(color(colors.surface_elevated))
+            .stroke(Stroke::new(1.0, color(colors.accent)))
             .corner_radius(CornerRadius::same(radius))
             .inner_margin(Margin::same(padding))
             .show(ui, |ui| {
@@ -153,7 +153,7 @@ impl Bar {
                     ui.label(
                         RichText::new(self.strings.filters_hint)
                             .small()
-                            .color(color(colors.text_muted)),
+                            .color(color(colors.text_secondary)),
                     );
                 } else if self.settings.config.layout.chips == Chips::Below
                     && !self.outcome.query.parts.is_empty()
@@ -161,7 +161,7 @@ impl Bar {
                     self.chips(ui);
                 }
                 if !self.outcome.rows.is_empty() {
-                    ui.add_space(4.0);
+                    ui.separator();
                     self.results(ui);
                 }
                 if !self.line.trim().is_empty() || !self.problems.is_empty() {
@@ -343,13 +343,13 @@ impl Bar {
     fn input_row(&mut self, ui: &mut Ui) {
         let theme = self.settings.theme.clone();
         let size = f32::from(theme.font.size);
-        let muted = color(theme.colors.text_muted);
+        let muted = color(theme.colors.text_secondary);
         ui.horizontal(|ui| {
             if theme.icons.set == IconSet::Phosphor {
                 ui.label(
                     RichText::new(icons::SEARCH)
                         .font(FontId::new(size * 1.2, FontFamily::Name(ICONS.into())))
-                        .color(muted),
+                        .color(color(theme.colors.accent)),
                 );
             }
             let selector_width = if self.settings.config.layout.mode_selector == ModeSelector::Dropdown {
@@ -367,15 +367,15 @@ impl Bar {
                 } else {
                     LayoutJob::simple_singleline(
                         text.as_str().to_owned(),
-                        FontId::proportional(size * 1.15),
-                        color(colors.text),
+                        FontId::proportional(size * 1.2),
+                        color(colors.text_primary),
                     )
                 };
                 if let Some(ghost) = &ghost {
                     job.append(
                         ghost,
                         0.0,
-                        TextFormat::simple(FontId::proportional(size * 1.15), color(colors.text_muted)),
+                        TextFormat::simple(FontId::proportional(size * 1.2), color(colors.text_disabled)),
                     );
                 }
                 job.wrap.max_width = wrap_width;
@@ -386,7 +386,7 @@ impl Bar {
                 .hint_text(
                     RichText::new(self.strings.placeholder)
                         .color(muted)
-                        .size(size * 1.15),
+                        .size(size * 1.2),
                 )
                 .frame(egui::Frame::NONE)
                 .desired_width(ui.available_width() - selector_width)
@@ -408,7 +408,7 @@ impl Bar {
 
     fn mode_dropdown(&mut self, ui: &mut Ui) {
         let effective = self.outcome.mode;
-        let muted = color(self.settings.theme.colors.text_muted);
+        let muted = color(self.settings.theme.colors.text_secondary);
         // The arrow is drawn with the icon font: Inter has its own glyphs at these code points.
         let caret = RichText::new(icons::CARET_DOWN)
             .family(FontFamily::Name(ICONS.into()))
@@ -443,14 +443,20 @@ impl Bar {
             for part in &self.outcome.query.parts {
                 let label = self.chip_label(part);
                 let used = part.is_used();
-                let (fill, text, stroke) = if used {
-                    (color(colors.chip), color(colors.chip_text), Stroke::NONE)
-                } else {
+                let (fill, text, stroke) = if !used {
                     (
                         Color32::TRANSPARENT,
                         color(colors.error),
                         Stroke::new(1.0, color(colors.error)),
                     )
+                } else if part.excluded {
+                    (
+                        color(colors.surface_hover),
+                        color(colors.text_primary),
+                        Stroke::NONE,
+                    )
+                } else {
+                    (color(colors.selection), color(colors.text_primary), Stroke::NONE)
                 };
                 let response = egui::Frame::new()
                     .fill(fill)
@@ -523,7 +529,7 @@ impl Bar {
         if index == self.selected {
             painter.rect_filled(rect, radius, color(colors.selection));
         } else if response.hovered() {
-            painter.rect_filled(rect, radius, color(colors.surface));
+            painter.rect_filled(rect, radius, color(colors.surface_hover));
         }
 
         let mut x = rect.left() + 8.0;
@@ -535,7 +541,7 @@ impl Bar {
                 egui::Align2::LEFT_CENTER,
                 family.glyph(),
                 FontId::new(size * 1.3, FontFamily::Name(ICONS.into())),
-                color(family.color(&theme.icons.colors)),
+                color(icons::color_of(family, theme)),
             );
             x += size * 1.3 + 8.0;
         }
@@ -548,7 +554,7 @@ impl Bar {
                 egui::Align2::RIGHT_CENTER,
                 format!("Alt+{}", index + 1),
                 FontId::proportional(size * 0.75),
-                color(colors.text_muted),
+                color(colors.text_secondary),
             );
             right = shortcut.left() - 10.0;
         }
@@ -557,13 +563,13 @@ impl Bar {
         match layout {
             Rows::Double => {
                 let name_pos = egui::pos2(x, middle - name_galley.size().y * 0.55 - 1.0);
-                painter.galley(name_pos, name_galley, color(colors.text));
+                painter.galley(name_pos, name_galley, color(colors.text_primary));
                 painter.text(
                     egui::pos2(x, middle + 2.0),
                     egui::Align2::LEFT_TOP,
                     &row.location,
                     FontId::proportional(size * 0.8),
-                    color(colors.text_muted),
+                    color(colors.text_secondary),
                 );
             }
             Rows::Single | Rows::Details => {
@@ -583,7 +589,7 @@ impl Bar {
                     let mut job = LayoutJob::simple_singleline(
                         secondary,
                         FontId::proportional(size * 0.85),
-                        color(colors.text_muted),
+                        color(colors.text_secondary),
                     );
                     job.wrap.max_width = space;
                     job.wrap.max_rows = 1;
@@ -593,10 +599,10 @@ impl Bar {
                 painter.galley(
                     egui::pos2(x, middle - name_galley.size().y / 2.0),
                     name_galley,
-                    color(colors.text),
+                    color(colors.text_primary),
                 );
                 let side_pos = egui::pos2(right - side_galley.size().x, middle - side_galley.size().y / 2.0);
-                painter.galley(side_pos, side_galley, color(colors.text_muted));
+                painter.galley(side_pos, side_galley, color(colors.text_secondary));
             }
         }
         response
@@ -604,7 +610,7 @@ impl Bar {
 
     fn footer(&self, ui: &mut Ui) {
         let colors = &self.settings.theme.colors;
-        let muted = color(colors.text_muted);
+        let muted = color(colors.text_secondary);
         ui.add_space(4.0);
         ui.separator();
         for problem in &self.problems {
@@ -653,10 +659,10 @@ impl Bar {
 
 /// The name with its matched letters highlighted (semi-bold, highlight color).
 fn name_job(name: &str, highlights: &[usize], theme: &serafind_settings::Theme, size: f32) -> LayoutJob {
-    let normal = TextFormat::simple(FontId::proportional(size), color(theme.colors.text));
+    let normal = TextFormat::simple(FontId::proportional(size), color(theme.colors.text_primary));
     let strong = TextFormat::simple(
         FontId::new(size, FontFamily::Name(BOLD.into())),
-        color(theme.colors.highlight),
+        color(theme.colors.accent),
     );
     let mut job = LayoutJob::default();
     let mut highlighted = highlights.iter().peekable();
@@ -692,7 +698,7 @@ fn inline_job(
         folder_exists: &exists,
     };
     let query = serafind_core::parse(text, &context);
-    let font = FontId::proportional(size * 1.15);
+    let font = FontId::proportional(size * 1.2);
     let mut job = LayoutJob::default();
     let mut at = 0;
     for part in &query.parts {
@@ -700,10 +706,10 @@ fn inline_job(
             job.append(
                 &text[at..part.span.start],
                 0.0,
-                TextFormat::simple(font.clone(), color(colors.text)),
+                TextFormat::simple(font.clone(), color(colors.text_primary)),
             );
         }
-        let mut format = TextFormat::simple(font.clone(), color(colors.text));
+        let mut format = TextFormat::simple(font.clone(), color(colors.text_primary));
         if !part.is_used() {
             format.color = color(colors.error);
             format.underline = Stroke::new(1.0, color(colors.error));
@@ -714,7 +720,11 @@ fn inline_job(
         at = part.span.end;
     }
     if at < text.len() {
-        job.append(&text[at..], 0.0, TextFormat::simple(font, color(colors.text)));
+        job.append(
+            &text[at..],
+            0.0,
+            TextFormat::simple(font, color(colors.text_primary)),
+        );
     }
     job
 }

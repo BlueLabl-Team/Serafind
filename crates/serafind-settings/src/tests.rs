@@ -57,8 +57,8 @@ fn a_few_keys_are_enough() {
 }
 
 #[rstest]
-#[case(SystemMode::Dark, "Dark")]
-#[case(SystemMode::Light, "Light")]
+#[case(SystemMode::Dark, "Default Dark")]
+#[case(SystemMode::Light, "Default Light")]
 fn system_theme_follows_the_desktop(#[case] mode: SystemMode, #[case] name: &str) {
     let dir = TempDir::new().unwrap();
     assert_eq!(load(dir.path(), mode).unwrap().theme.name, name);
@@ -67,7 +67,10 @@ fn system_theme_follows_the_desktop(#[case] mode: SystemMode, #[case] name: &str
 #[test]
 fn a_named_theme_ignores_the_desktop() {
     let dir = folder_with("[appearance]\ntheme = \"light\"\n");
-    assert_eq!(load(dir.path(), SystemMode::Dark).unwrap().theme.name, "Light");
+    assert_eq!(
+        load(dir.path(), SystemMode::Dark).unwrap().theme.name,
+        "Default Light"
+    );
 }
 
 #[test]
