@@ -6,6 +6,7 @@
 mod actions;
 mod app;
 mod app_icon;
+mod autostart;
 mod bar;
 mod completion;
 mod content;
@@ -14,6 +15,7 @@ mod desktop;
 mod format;
 mod icons;
 mod logo;
+mod priority;
 mod search;
 mod shortcut;
 mod strings;
@@ -36,13 +38,15 @@ Usage: serafind [command] [--settings <folder>]
 
 Commands:
   (none)    Start Serafind in the background, or open / close the bar if it runs
+  start     Start Serafind in the background if it does not run (used with the session)
   toggle    Open the bar, or close it
   show      Open the bar
   hide      Close the bar
   status    Show whether Serafind runs, and its index
   quit      Stop Serafind
   daemon    Run Serafind in this terminal (for debugging)
-  uninstall Stop Serafind and remove its desktop entry (settings are kept)
+  uninstall Stop Serafind, remove its desktop entry and its start with the session
+            (settings are kept)
 
 Options:
   --settings <folder>  Use another settings folder (default: ~/.config/serafind)
@@ -52,6 +56,7 @@ Options:
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Command {
     Start,
+    Background,
     Toggle,
     Show,
     Hide,
@@ -84,6 +89,7 @@ fn main() -> ExitCode {
                 None => return usage_error("--settings needs a folder"),
             },
             "toggle" => Command::Toggle,
+            "start" => Command::Background,
             "show" => Command::Show,
             "hide" => Command::Hide,
             "status" => Command::Status,
@@ -134,6 +140,11 @@ fn run(command: Command, settings_dir: Option<PathBuf>, home: PathBuf) -> ExitCo
             if let Ok(mut client) = Client::connect() {
                 let _ = client.call(&Request::Quit);
             }
+            match autostart::apply(false) {
+                Ok(Some(change)) => println!("Start with the session: {change}."),
+                Ok(None) => {}
+                Err(error) => eprintln!("serafind: cannot remove the start with the session: {error}"),
+            }
             match desktop::uninstall_desktop_file() {
                 Ok(removed) if removed.is_empty() => println!("No desktop entry to remove."),
                 Ok(removed) => {
@@ -151,6 +162,13 @@ fn run(command: Command, settings_dir: Option<PathBuf>, home: PathBuf) -> ExitCo
             }
             ExitCode::SUCCESS
         }
+        Command::Background => match Client::connect() {
+            Ok(_) => {
+                println!("Serafind is already running.");
+                ExitCode::SUCCESS
+            }
+            Err(_) => start_in_background(settings_dir.as_deref(), false),
+        },
         Command::Start => match Client::connect() {
             Ok(mut client) => send(
                 &mut client,
@@ -232,6 +250,14 @@ fn send(client: &mut Client, request: &Request) -> ExitCode {
                 (Some(shortcut), None) => println!("Shortcut: {shortcut}."),
                 (None, None) => println!("Shortcut: being set up."),
             }
+            println!(
+                "Starts with the session: {}.",
+                if status.with_session {
+                    "yes"
+                } else {
+                    "no ([startup] with_session = false)"
+                }
+            );
             match (status.tray_enabled, &status.tray_problem) {
                 (false, _) => println!("Tray icon: off ([tray] enabled = false)."),
                 (true, Some(problem)) => println!("Tray icon: not shown: {problem}."),

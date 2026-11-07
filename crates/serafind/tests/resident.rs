@@ -36,7 +36,7 @@ impl Instance {
         std::fs::write(
             settings.join("config.toml"),
             format!(
-                "[index]\nroots = [{:?}]\n[shortcut]\nenabled = false\n[actions]\nterminal = \"true\"\n",
+                "[index]\nroots = [{:?}]\n[shortcut]\nenabled = false\n[actions]\nterminal = \"true\"\n[startup]\nwith_session = false\n",
                 data.to_string_lossy()
             ),
         )
@@ -61,6 +61,8 @@ impl Instance {
             .env("XDG_DATA_HOME", &self.data_home)
             // And so does the log.
             .env("XDG_STATE_HOME", &self.data_home)
+            // And the start with the session.
+            .env("XDG_CONFIG_HOME", &self.data_home)
             .output()
             .unwrap()
     }
@@ -231,4 +233,32 @@ fn content_search_reads_the_files() {
         panic!("no results");
     };
     assert!(results.problem.unwrap().contains("not a valid expression"));
+}
+
+#[test]
+fn start_with_the_session_is_applied_live() {
+    let instance = Instance::new("session");
+    assert!(instance.run(&[]).status.success());
+    let file = instance
+        .data_home
+        .join("autostart/io.github.bluelabl_team.Serafind.desktop");
+    assert!(!file.exists());
+    let config = instance.settings.join("config.toml");
+    let text = std::fs::read_to_string(&config).unwrap();
+    std::fs::write(
+        &config,
+        text.replace("with_session = false", "with_session = true"),
+    )
+    .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !file.exists() && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let entry = std::fs::read_to_string(&file).unwrap();
+    assert!(entry.contains(" start\n"), "{entry}");
+    assert!(stdout(&instance.run(&["status"])).contains("Starts with the session: yes"));
+    // Already running: `start` leaves it alone.
+    let output = instance.run(&["start"]);
+    assert!(output.status.success());
+    assert!(stdout(&output).contains("already running"));
 }

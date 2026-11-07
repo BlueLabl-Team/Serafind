@@ -128,6 +128,11 @@ exclude_paths = []
 # Hidden files are always indexed.
 hidden_folders = false
 
+[startup]
+# Start Serafind when the session opens: an autostart entry on Linux
+# (~/.config/autostart), a Run registry value on Windows. False removes it.
+with_session = true
+
 [shortcut]
 # Serafind sets up the global shortcut itself. Set to false to bind `serafind toggle` to a key
 # in your desktop's keyboard settings instead.
