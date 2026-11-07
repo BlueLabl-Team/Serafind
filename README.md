@@ -112,8 +112,8 @@ You need Rust (latest stable) and Git.
 ```bash
 git clone git@github.com:BlueLabl-Team/Serafind.git
 cd Serafind
-cargo build --release          # target/release/serafind
 cargo run --release -p serafind  # opens the bar (the global shortcut comes later)
+cargo build --profile dist       # smallest executable, for publishing: target/dist/serafind
 cargo test --workspace         # or: cargo nextest run --workspace
 cargo insta review             # review changed snapshots
 ```
