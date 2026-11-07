@@ -1,0 +1,12 @@
+---
+source: crates/serafind-core/src/matching/tests.rs
+expression: paths
+---
+[
+    "Report Designer",
+    "/home/me/report.pdf",
+    "/home/me/deep/down/report.pdf",
+    "/home/me/Reports",
+    "/home/me/reports-2026.ods",
+    "/home/me/final-report.pdf",
+]
