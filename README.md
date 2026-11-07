@@ -34,7 +34,7 @@ The same syntax as PowerHive's quick search, where each part of the line is show
 invoice ext:pdf,docx in:~/Documents type:file -draft "exact phrase" rep*rt
 ```
 
-- words (or `"quoted phrases"`) the name must contain; `*` and `?` make a pattern
+- words (or `"quoted phrases"`) the name must contain; `*` and `?` make a pattern found anywhere in the name (`rep*rt` finds `my-report.pdf`), `^` and `$` anchor it at the start or the end (`^inv`, `.pdf$`); case is ignored unless the word has an upper-case letter, accents are always ignored
 - `ext:` extensions, `in:` starting folder (Tab completes it), `type:` `file` or `folder`
 - `-` excludes a word or a filter
 
@@ -97,7 +97,7 @@ cargo insta review             # review changed snapshots
 |---|---|---|
 | 0 | Workspace, test tooling, roadmap | ✅ |
 | 1 | `core`: search syntax (PowerHive grammar + mode keywords), matching, ranking (fuzzy / prefix) | ✅ |
-| 2 | `index`: parallel first walk, filesystem watching, exclusions, benchmarks | ⬜ |
+| 2 | `index`: parallel first walk, filesystem watching, exclusions, benchmarks | ✅ |
 | 3 | Search bar (egui): input, chips, results, keyboard navigation, `in:` completion | ⬜ |
 | 4 | Resident process: single instance, `serafind toggle`, global shortcut (X11, Windows, Wayland portal), tray icon | ⬜ |
 | 5 | Actions: open, show in the file manager, copy the path | ⬜ |
