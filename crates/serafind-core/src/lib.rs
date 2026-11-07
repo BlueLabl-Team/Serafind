@@ -8,6 +8,6 @@ mod mode;
 pub mod syntax;
 pub mod text;
 
-pub use matching::{Candidate, EntryKind, MatchRank, Matcher, Ranked, Score};
+pub use matching::{Candidate, EntryKind, MatchRank, Matcher, Partial, Ranked, Score};
 pub use mode::SearchMode;
 pub use syntax::{ParseContext, Part, PartError, PartKind, Query, parse};
