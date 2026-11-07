@@ -385,9 +385,10 @@ impl eframe::App for App {
         for request in self.bar.take_requests() {
             match request {
                 Request::Close => self.close_bar(&ctx),
-                // Opening and showing in the folder come with step 5 of the roadmap.
-                Request::Open(_) | Request::Reveal(_) => {
-                    self.bar.notify(crate::strings::Strings::ENGLISH.action_not_ready);
+                Request::Act(action, path) => {
+                    if self.bar.perform(action, &path) {
+                        self.close_bar(&ctx);
+                    }
                 }
             }
         }

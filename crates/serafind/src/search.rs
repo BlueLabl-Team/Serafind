@@ -86,6 +86,34 @@ impl Searcher {
         }
     }
 
+    /// Asks the resident process to do `action` on `path`.
+    ///
+    /// # Errors
+    /// Why it was not done.
+    pub fn act(&self, action: serafind_ipc::Action, path: &Path) -> Result<(), String> {
+        match &self.source {
+            #[cfg(test)]
+            Source::Local(_) => {
+                let _ = (action, path);
+                Ok(())
+            }
+            Source::Remote(client) => {
+                let request = Request::Act {
+                    action,
+                    path: path.to_string_lossy().into_owned(),
+                    activation_token: None,
+                };
+                let mut client = client.lock().map_err(|_| "the connection is broken".to_owned())?;
+                match client.call(&request) {
+                    Ok(Response::Ok) => Ok(()),
+                    Ok(Response::Error { message }) => Err(message),
+                    Ok(other) => Err(format!("unexpected answer: {other:?}")),
+                    Err(error) => Err(format!("Serafind does not answer: {error}")),
+                }
+            }
+        }
+    }
+
     /// The home folder.
     #[must_use]
     pub fn home(&self) -> &Path {

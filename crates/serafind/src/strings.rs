@@ -26,8 +26,8 @@ pub struct Strings {
     pub unreachable: &'static str,
     /// The path was copied.
     pub path_copied: &'static str,
-    /// Opening is not available yet.
-    pub action_not_ready: &'static str,
+    /// The name was copied.
+    pub name_copied: &'static str,
     /// Prefix of a settings error.
     pub settings_error: &'static str,
     /// Prefix of a global shortcut problem.
@@ -76,7 +76,7 @@ impl Strings {
         outside_index: "This folder is not indexed",
         unreachable: "Serafind is not running",
         path_copied: "Path copied",
-        action_not_ready: "Opening comes in a later version",
+        name_copied: "Name copied",
         settings_error: "Settings not applied",
         no_shortcut: "No global shortcut",
         one_result: "1 result",
