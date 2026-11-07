@@ -68,7 +68,8 @@ fn main() -> ExitCode {
         .with_app_id("serafind")
         .with_decorations(false)
         .with_transparent(true)
-        .with_resizable(false)
+        // Not "false": on Wayland that freezes the size at creation and the bar could not grow.
+        .with_resizable(true)
         .with_always_on_top()
         .with_taskbar(false)
         .with_visible(true)
