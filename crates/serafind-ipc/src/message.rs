@@ -77,6 +77,7 @@ pub enum Event {
 
 /// The state of the resident process.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[expect(clippy::struct_excessive_bools, reason = "independent yes/no facts of a report")]
 pub struct Status {
     /// Its process id.
     pub pid: u32,
@@ -98,6 +99,12 @@ pub struct Status {
     /// Why there is no global shortcut, and what to do.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shortcut_problem: Option<String>,
+    /// The notification area icon is turned on (`[tray] enabled`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub tray_enabled: bool,
+    /// Why the turned-on icon is not shown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tray_problem: Option<String>,
 }
 
 /// The modes of the bar.

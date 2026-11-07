@@ -23,6 +23,8 @@ pub struct Config {
     pub index: IndexSettings,
     /// The global shortcut.
     pub shortcut: Shortcut,
+    /// The icon in the notification area.
+    pub tray: Tray,
 }
 
 /// `[appearance]`.
@@ -189,6 +191,14 @@ pub struct Shortcut {
     pub windows: Option<String>,
     /// Replaces `toggle` on Linux.
     pub linux: Option<String>,
+}
+
+/// `[tray]`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Tray {
+    /// Show an icon in the notification area (system tray).
+    pub enabled: bool,
 }
 
 impl Shortcut {

@@ -56,7 +56,7 @@ serafind hide       # close the bar
 serafind status     # is it running? how big is the index?
 serafind quit       # stop Serafind
 serafind daemon     # run in this terminal, to see its messages
-serafind uninstall  # remove what Serafind added to the desktop (its .desktop file)
+serafind uninstall  # remove what Serafind added to the desktop (its .desktop file and logo)
 ```
 
 ### Global shortcut
@@ -67,7 +67,14 @@ serafind uninstall  # remove what Serafind added to the desktop (its .desktop fi
 - **X11 and Windows:** Serafind registers the shortcut itself.
 - **When it fails** (key taken, no portal), the reason is shown by `serafind status`, at the bottom of the bar and in a notification. Then bind `serafind toggle` to a key in your desktop's keyboard settings, and set `[shortcut] enabled = false`.
 
-On Linux, Serafind writes `~/.local/share/applications/io.github.bluelabl_team.Serafind.desktop`: the portal needs it to know the application.
+On Linux, Serafind writes `~/.local/share/applications/io.github.bluelabl_team.Serafind.desktop` and its logo in `~/.local/share/icons/hicolor/`: the portal needs them to know the application.
+
+### Notification area icon
+
+Off by default; turn it on with `[tray] enabled = true` in `config.toml`. A click on the icon opens or closes the bar; its menu opens the bar, indexes again, opens the settings folder or quits Serafind. `serafind status` tells whether it is shown.
+
+- **Linux:** KDE and most desktops show it. **GNOME** needs the [AppIndicator and KStatusNotifierItem Support](https://extensions.gnome.org/extension/615/appindicator-support/) extension (`gnome-shell-extension-appindicator` on Fedora); restart Serafind after installing it.
+- **Windows:** in the notification area of the taskbar.
 
 Messages of the background process go to `~/.local/state/serafind/serafind.log` (Linux) or the local application data folder (Windows).
 
@@ -99,6 +106,10 @@ serafind/
 - Themes use the same color roles as PowerHive (`primary`, `accent`, `surface_elevated`, `text_secondary`…), so both applications look alike.
 - `theme = "system"` follows the dark or light mode of the desktop. Font and icons come from the theme, and `[appearance]` in `config.toml` can override them.
 - The global shortcut is `Super+F` by default (`[shortcut] toggle`), with an optional per-system value.
+
+## Logo
+
+A winged magnifying glass: Serafind is *seraphim* + *find*. The current logo is a placeholder; its source is [`crates/serafind/assets/logo/serafind.svg`](crates/serafind/assets/logo/serafind.svg), and the PNG sizes next to it are rendered from it.
 
 ## Built with
 
@@ -155,7 +166,7 @@ cargo insta review             # review changed snapshots
 | 2 | `index`: parallel first walk, filesystem watching, exclusions, benchmarks | ✅ |
 | 3 | Settings and themes (TOML, defaults, validation, live reload) | ✅ |
 | 3 | Search bar (egui): input, chips, results, keyboard navigation, `in:` completion | ✅ |
-| 4 | Resident process: single instance, `serafind toggle`, global shortcut (X11, Windows, Wayland portal) ✅, tray icon | 🚧 |
+| 4 | Resident process: single instance, `serafind toggle`, global shortcut (X11, Windows, Wayland portal), tray icon | ✅ |
 | 4b | Choose where the bar appears on Wayland (layer-shell, focus on X11, or another way: to be decided) | ⬜ |
 | 5 | Actions: open, show in the file manager, copy the path | ⬜ |
 | 6 | Apps mode: `.desktop` files (Linux), Start menu shortcuts (Windows) | ⬜ |
