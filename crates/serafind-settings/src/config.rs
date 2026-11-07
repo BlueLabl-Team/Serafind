@@ -31,6 +31,22 @@ pub struct Config {
     pub keys: BarKeys,
     /// The Content mode.
     pub content: ContentSettings,
+    /// Starting with the session.
+    pub startup: Startup,
+}
+
+/// `[startup]`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Startup {
+    /// Start Serafind when the session opens.
+    pub with_session: bool,
+}
+
+impl Default for Startup {
+    fn default() -> Self {
+        Self { with_session: true }
+    }
 }
 
 /// `[content]`: the search inside files.

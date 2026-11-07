@@ -137,6 +137,9 @@ pub struct Status {
     /// Why the turned-on icon is not shown.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tray_problem: Option<String>,
+    /// Starts with the session (`[startup] with_session`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub with_session: bool,
 }
 
 /// The modes of the bar.

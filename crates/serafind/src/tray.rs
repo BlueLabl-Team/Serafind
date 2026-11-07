@@ -38,6 +38,14 @@ pub fn start(on_action: OnAction) -> Result<Tray, String> {
     backend::start(on_action).map(Tray)
 }
 
+impl Tray {
+    /// Why the icon is not shown right now (no notification area yet), if so.
+    #[must_use]
+    pub fn problem(&self) -> Option<String> {
+        self.0.problem()
+    }
+}
+
 impl Drop for Tray {
     fn drop(&mut self) {
         self.0.stop();
@@ -58,34 +66,49 @@ fn menu_entries() -> [Option<(Action, &'static str)>; 5] {
 
 #[cfg(target_os = "linux")]
 mod backend {
+    use std::sync::{Arc, Mutex};
+
     use ksni::blocking::TrayMethods;
 
     use super::{Action, OnAction, Strings, menu_entries};
     use crate::logo;
 
-    pub struct Handle(ksni::blocking::Handle<Icon>);
+    /// Shown while the desktop has no notification area. At login Serafind may start before it
+    /// (GNOME loads its extensions after the session starts): the icon then waits for it.
+    const WAITING: &str = "waiting for the notification area of the desktop (on GNOME, it comes \
+         with the \"AppIndicator and KStatusNotifierItem Support\" extension)";
+
+    pub struct Handle {
+        tray: ksni::blocking::Handle<Icon>,
+        waiting: Arc<Mutex<Option<String>>>,
+    }
 
     impl Handle {
         pub fn stop(&self) {
-            self.0.shutdown().wait();
+            self.tray.shutdown().wait();
+        }
+
+        pub fn problem(&self) -> Option<String> {
+            self.waiting.lock().ok().and_then(|waiting| waiting.clone())
         }
     }
 
     pub fn start(on_action: OnAction) -> Result<Handle, String> {
-        Icon { on_action }
+        let waiting = Arc::new(Mutex::new(None));
+        let icon = Icon {
+            on_action,
+            waiting: Arc::clone(&waiting),
+        };
+        // A missing notification area is not an error: the icon appears when it comes.
+        icon.assume_sni_available(true)
             .spawn()
-            .map(Handle)
-            .map_err(|error| match error {
-                ksni::Error::Watcher(_) | ksni::Error::WontShow => format!(
-                    "your desktop shows no notification area icons ({error}); on GNOME, install the \
-                 \"AppIndicator and KStatusNotifierItem Support\" extension, then restart Serafind"
-                ),
-                other => format!("cannot show the icon ({other})"),
-            })
+            .map(|tray| Handle { tray, waiting })
+            .map_err(|error| format!("cannot show the icon ({error})"))
     }
 
     pub struct Icon {
         on_action: OnAction,
+        waiting: Arc<Mutex<Option<String>>>,
     }
 
     impl Icon {
@@ -141,6 +164,22 @@ mod backend {
             }
         }
 
+        fn watcher_online(&self) {
+            if let Ok(mut waiting) = self.waiting.lock() {
+                *waiting = None;
+            }
+            eprintln!("serafind: notification area icon shown");
+        }
+
+        fn watcher_offline(&self, reason: ksni::OfflineReason) -> bool {
+            if let Ok(mut waiting) = self.waiting.lock() {
+                *waiting = Some(WAITING.to_owned());
+            }
+            eprintln!("serafind: no notification area yet ({reason:?}): the icon waits for it");
+            // Keep running: the icon appears when the notification area comes.
+            true
+        }
+
         fn activate(&mut self, _x: i32, _y: i32) {
             self.act(Action::Toggle);
         }
@@ -180,6 +219,11 @@ mod backend {
     }
 
     impl Handle {
+        #[expect(clippy::unused_self, reason = "same interface on every system")]
+        pub fn problem(&self) -> Option<String> {
+            None
+        }
+
         pub fn stop(&self) {
             self.stop.store(true, Ordering::Release);
             if let Some(thread) = self.thread.lock().ok().and_then(|mut thread| thread.take()) {
@@ -291,6 +335,10 @@ mod backend {
 
     impl Handle {
         pub fn stop(&self) {}
+
+        pub fn problem(&self) -> Option<String> {
+            None
+        }
     }
 
     pub fn start(_on_action: OnAction) -> Result<Handle, String> {
