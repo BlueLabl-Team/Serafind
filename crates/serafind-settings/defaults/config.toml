@@ -18,7 +18,7 @@ light_theme = "light"
 
 [window]
 # Width of the bar, in logical pixels.
-width = 680
+width = 760
 # Distance from the top of the screen, as a fraction of its height (0.0 = top, 0.5 = middle).
 top = 0.25
 # Screen where the bar opens: "mouse" (the screen under the mouse pointer) or "primary".
