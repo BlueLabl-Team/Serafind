@@ -1,0 +1,11 @@
+---
+source: crates/serafind-core/src/mode.rs
+expression: "SearchMode::ALL"
+---
+[
+    All,
+    Apps,
+    Folders,
+    Files,
+    Content,
+]
