@@ -1,0 +1,19 @@
+[package]
+name = "serafind-core"
+description = "Search line syntax and matching rules for Serafind (no system access)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+
+
+[dev-dependencies]
+rstest.workspace = true
+proptest.workspace = true
+insta.workspace = true
+
+[lints]
+workspace = true

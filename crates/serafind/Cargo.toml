@@ -1,0 +1,18 @@
+[package]
+name = "serafind"
+description = "Serafind: a quick search bar opened by a global shortcut."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+serafind-core.workspace = true
+serafind-index.workspace = true
+
+[dev-dependencies]
+
+
+[lints]
+workspace = true
