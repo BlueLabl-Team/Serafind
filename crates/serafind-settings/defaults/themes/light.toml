@@ -1,0 +1,46 @@
+# Serafind theme: Light.
+#
+# Copy this file under another name in the same folder to make your own theme, then choose it
+# in config.toml (theme = "file-name-without-toml"). A theme can start from another one with
+# extends = "light" and give only the values it changes. Colors are "#rrggbb" or "#rrggbbaa".
+
+name = "Light"
+
+[colors]
+background = "#f9f9f9"   # the bar
+surface = "#ffffff"      # the input, a hovered row
+border = "#e0e0e0"
+text = "#1a1a1a"
+text_muted = "#616161"   # folders, hints, counters
+accent = "#005fb8"       # caret, active mode, focus
+selection = "#005fb81f"  # the selected row
+highlight = "#005fb8"    # matched letters
+chip = "#ebebeb"
+chip_text = "#262626"
+error = "#c42b1c"        # chips that cannot be used, settings errors
+shadow = "#00000033"
+
+[font]
+family = "Inter"         # "Inter" (built in), an installed font name, or a .ttf / .otf path
+size = 15
+
+[shape]
+radius = 10              # corner radius of the bar, chips and rows
+padding = 10
+row_height = 36
+shadow = true
+
+[icons]
+set = "phosphor"         # "phosphor" or "none"
+
+[icons.colors]
+folder = "#c98a00"
+document = "#2f6fb3"
+pdf = "#c4312b"
+image = "#2e8b4e"
+audio = "#8e44ad"
+video = "#b0651e"
+archive = "#707070"
+code = "#1f6fc5"
+app = "#005fb8"
+other = "#616161"

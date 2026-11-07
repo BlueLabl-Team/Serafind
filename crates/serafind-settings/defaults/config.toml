@@ -1,0 +1,72 @@
+# Serafind settings.
+#
+# Changes apply as soon as the file is saved. Every key is optional: a missing key keeps its
+# default value (shown below). An unknown key or a wrong value is an error: the whole file is
+# then ignored, the previous settings stay, and the error is shown in the search bar.
+
+[appearance]
+# "system" follows the dark or light mode of the desktop; otherwise the name of a theme:
+# "dark", "light", or a file of the themes folder without ".toml" (e.g. "my-theme").
+theme = "system"
+# Themes used when theme = "system".
+dark_theme = "dark"
+light_theme = "light"
+# Override the theme's font and icons (remove the # to use them).
+# font_family = "Inter"   # "Inter" (built in), an installed font name, or a .ttf / .otf path
+# font_size = 15
+# icons = "phosphor"      # "phosphor" or "none"
+
+[window]
+# Width of the bar, in logical pixels.
+width = 680
+# Distance from the top of the screen, as a fraction of its height (0.0 = top, 0.5 = middle).
+top = 0.25
+# Screen where the bar opens: "mouse" (the screen under the mouse pointer) or "primary".
+screen = "mouse"
+
+[layout]
+# Mode selector: "dropdown" (discreet, at the right of the input) or "tabs" (always shown above).
+mode_selector = "dropdown"
+# How the understood parts of the search are shown: "below" (chips under the input),
+# "inline" (colored in the input) or "hidden".
+chips = "below"
+# Result rows: "single" (name and folder on one line), "double" (folder under the name)
+# or "details" (single line with size and modification date).
+rows = "single"
+
+[behavior]
+# Hide the bar when it loses the focus (click elsewhere, Alt+Tab).
+hide_on_focus_loss = true
+# Show the last search again (selected) when the bar opens.
+keep_last_query = false
+# Escape key: "close", or "clear-then-close" (a first Escape clears the search).
+escape = "close"
+
+[results]
+# Rows shown before scrolling.
+visible = 8
+# Results kept at most (scrolling).
+max = 50
+
+[index]
+# Folders indexed. "~" is the home folder.
+roots = ["~"]
+# Folder names never entered, wherever they are.
+exclude_names = [
+    ".git", ".hg", ".svn", "node_modules", "target", "__pycache__", ".venv", "venv", ".tox",
+    ".gradle", ".idea", ".cache", "$Recycle.Bin",
+]
+# Folders never entered, by path ("~" is the home folder). Empty means the default for the
+# system: the trash on Linux, AppData on Windows.
+exclude_paths = []
+# Enter hidden folders too (names starting with a dot, or hidden on Windows).
+# Hidden files are always indexed.
+hidden_folders = false
+
+[shortcut]
+# Global shortcut that opens and closes the bar: modifiers (Ctrl, Alt, Shift, Super) and a key,
+# joined with "+". Super is the Windows / logo key.
+toggle = "Super+F"
+# A different shortcut on one system only (remove the # to use it).
+# windows = "Ctrl+Alt+Space"
+# linux = "Super+F"
