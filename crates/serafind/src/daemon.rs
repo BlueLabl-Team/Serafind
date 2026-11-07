@@ -14,10 +14,13 @@ use serafind_ipc::{
 };
 use serafind_settings::{IndexSettings, Settings, SettingsWatcher, SystemMode};
 
+use crate::content::{ContentQuery, ContentSearch};
 use crate::search::{SharedApps, SharedIndex, from_wire_mode, search, understand};
 use crate::shortcut::{Shortcut, ShortcutState};
 use crate::tray::{Action, Tray};
 use crate::usage::Usage;
+use serafind_core::SearchMode;
+use std::collections::HashMap;
 
 /// How long a bar process may take to connect before another one may be started.
 const BAR_START_TIMEOUT: Duration = Duration::from_secs(5);
@@ -52,6 +55,9 @@ pub fn run(settings_dir: Option<PathBuf>, home: PathBuf) -> io::Result<()> {
         live_index: Mutex::new(None),
         index_settings: Mutex::new(settings.config.index.clone()),
         terminal: Mutex::new(settings.config.actions.terminal.clone()),
+        open_at_line: Mutex::new(settings.config.actions.open_at_line.clone()),
+        content: Mutex::new(settings.config.content.clone()),
+        content_searches: Mutex::new(HashMap::new()),
         apps: Arc::new(RwLock::new(Arc::new(Vec::new()))),
         apps_watcher: Mutex::new(None),
         usage: Mutex::new(Usage::load(Usage::default_file())),
@@ -94,6 +100,12 @@ struct Daemon {
     index_settings: Mutex<IndexSettings>,
     /// `[actions] terminal`.
     terminal: Mutex<String>,
+    /// `[actions] open_at_line`.
+    open_at_line: Mutex<String>,
+    /// `[content]`.
+    content: Mutex<serafind_settings::ContentSettings>,
+    /// The search inside files of each connection, with the request it answers.
+    content_searches: Mutex<HashMap<u64, (String, Arc<ContentSearch>)>>,
     /// The installed applications.
     apps: SharedApps,
     /// Reads the applications again when they change.
@@ -171,6 +183,8 @@ impl Daemon {
                 break;
             }
         }
+        // Stop its search inside files, if any.
+        drop(self.content_searches.lock().expect("content lock").remove(&id));
         let mut bar = self.bar.lock().expect("bar lock");
         if bar.link.as_ref().is_some_and(|(bar_id, _)| *bar_id == id) {
             bar.link = None;
@@ -197,7 +211,7 @@ impl Daemon {
                 Response::Ok
             }
             Request::Status => Response::Status(self.status()),
-            Request::Search { line, mode, max } => Response::Results(self.search(&line, mode, max)),
+            Request::Search { line, mode, max } => Response::Results(self.search(&line, mode, max, id)),
             Request::BarVisible { visible } => {
                 self.bar.lock().expect("bar lock").visible = visible;
                 Response::Ok
@@ -210,6 +224,17 @@ impl Daemon {
                 let terminal = self.terminal.lock().expect("terminal lock").clone();
                 let result = if action == serafind_ipc::Action::Launch {
                     self.launch(&path, &terminal, activation_token.as_deref())
+                } else if let serafind_ipc::Action::OpenAtLine { line } = action {
+                    let apps = self.apps.read().map(|apps| Arc::clone(&apps)).unwrap_or_default();
+                    let setting = self.open_at_line.lock().expect("open at line lock").clone();
+                    crate::actions::open_at_line(
+                        Path::new(&path),
+                        line,
+                        &setting,
+                        &apps,
+                        &terminal,
+                        activation_token.as_deref(),
+                    )
                 } else {
                     crate::actions::perform(action, Path::new(&path), &terminal, activation_token.as_deref())
                 };
@@ -410,6 +435,101 @@ impl Daemon {
         }
     }
 
+    /// The Content mode: starts a search inside the files for this connection (or goes on with
+    /// the one already running for the same line), waits a little, and gives what it found so
+    /// far; `searching` asks the bar to come back for more.
+    fn search_content(
+        &self,
+        query: &serafind_core::Query,
+        line: &str,
+        mode: serafind_ipc::Mode,
+        max: usize,
+        connection: u64,
+    ) -> Results {
+        let empty = Results {
+            mode: Some(serafind_ipc::Mode::Content),
+            ..Results::default()
+        };
+        let key = format!("{line}\u{0}{mode:?}\u{0}{max}");
+        let running = {
+            let searches = self.content_searches.lock().expect("content lock");
+            searches
+                .get(&connection)
+                .filter(|(running, _)| *running == key)
+                .map(|(_, search)| Arc::clone(search))
+        };
+        let search = if let Some(search) = running {
+            search
+        } else {
+            let content_query = match ContentQuery::new(query) {
+                Ok(Some(content_query)) => content_query,
+                Ok(None) => return empty,
+                Err(problem) => {
+                    return Results {
+                        problem: Some(problem),
+                        ..empty
+                    };
+                }
+            };
+            let index = self.index.read().ok().and_then(|index| index.clone());
+            let Some(index) = index else {
+                return Results {
+                    indexing: true,
+                    ..empty
+                };
+            };
+            let candidates = index
+                .read()
+                .ok()
+                .and_then(|index| index.content_candidates(query));
+            let Some(files) = candidates else {
+                return Results {
+                    outside_index: true,
+                    ..empty
+                };
+            };
+            let settings = self.content.lock().expect("content settings lock").clone();
+            let max_size = u64::from(settings.max_file_size) * 1024 * 1024;
+            let search = Arc::new(ContentSearch::start(files, content_query, max_size, max));
+            self.content_searches
+                .lock()
+                .expect("content lock")
+                .insert(connection, (key, Arc::clone(&search)));
+            search
+        };
+        search.wait(Duration::from_millis(120));
+        let progress = search.progress();
+        let rows = progress
+            .hits
+            .iter()
+            .map(|(path, found)| serafind_ipc::Row {
+                name: path
+                    .file_name()
+                    .map_or_else(String::new, |name| name.to_string_lossy().into_owned()),
+                location: crate::search::shorten(path.parent().unwrap_or(path), &self.home),
+                path: path.to_string_lossy().into_owned(),
+                kind: serafind_ipc::Kind::File,
+                highlights: Vec::new(),
+                app: None,
+                icon: None,
+                line: Some(serafind_ipc::Line {
+                    number: found.line,
+                    text: found.text.clone(),
+                    highlights: found.highlights.clone(),
+                    count: found.count,
+                }),
+            })
+            .collect();
+        let percent = (progress.read * 100).checked_div(progress.files).unwrap_or(100);
+        Results {
+            rows,
+            total: progress.total as u64,
+            searching: !progress.done,
+            progress: Some(u8::try_from(percent.min(100)).unwrap_or(100)),
+            ..empty
+        }
+    }
+
     /// Starts the application `id`, and counts it when learning from usage.
     fn launch(&self, id: &str, terminal: &str, token: Option<&str>) -> Result<(), String> {
         let apps = self.apps.read().map(|apps| Arc::clone(&apps)).unwrap_or_default();
@@ -454,8 +574,11 @@ impl Daemon {
         }
     }
 
-    fn search(&self, line: &str, mode: serafind_ipc::Mode, max: u32) -> Results {
+    fn search(&self, line: &str, mode: serafind_ipc::Mode, max: u32, connection: u64) -> Results {
         let query = understand(line, &self.home);
+        if query.effective_mode(from_wire_mode(mode)) == SearchMode::Content {
+            return self.search_content(&query, line, mode, max as usize, connection);
+        }
         let apps = self.apps.read().map(|apps| Arc::clone(&apps)).unwrap_or_default();
         let index = self.index.read().ok().and_then(|index| index.clone());
         let index = index.as_ref().and_then(|index| index.read().ok());
@@ -524,6 +647,12 @@ impl Daemon {
                 .actions
                 .terminal
                 .clone_into(&mut daemon.terminal.lock().expect("terminal lock"));
+            settings
+                .config
+                .actions
+                .open_at_line
+                .clone_into(&mut daemon.open_at_line.lock().expect("open at line lock"));
+            *daemon.content.lock().expect("content settings lock") = settings.config.content.clone();
             daemon
                 .learn_from_usage
                 .store(settings.config.behavior.learn_from_usage, Ordering::Release);

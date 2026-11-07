@@ -292,3 +292,49 @@ proptest! {
         }
     }
 }
+
+#[test]
+fn content_candidates_are_files_with_the_file_filters() {
+    let index = index_of(&[
+        "notes.txt",
+        "Projects/app/main.rs",
+        "Projects/app/README.md",
+        "Projects/",
+        "photo.jpg",
+    ]);
+    let root = PathBuf::from("/home/me");
+    let candidates = |line: &str| {
+        let query = parse(
+            line,
+            &ParseContext {
+                home: &root,
+                current_folder: &root,
+                folder_exists: &|_| true,
+            },
+        );
+        index.content_candidates(&query).map(|files| {
+            files
+                .iter()
+                .map(|path| path.strip_prefix(&root).unwrap().to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+        })
+    };
+    assert_eq!(
+        candidates("todo").unwrap(),
+        [
+            "notes.txt",
+            "photo.jpg",
+            "Projects/app/main.rs",
+            "Projects/app/README.md"
+        ]
+    );
+    assert_eq!(
+        candidates("todo ext:rs,md -ext:md").unwrap(),
+        ["Projects/app/main.rs"]
+    );
+    assert_eq!(
+        candidates("todo in:~/Projects").unwrap(),
+        ["Projects/app/main.rs", "Projects/app/README.md"]
+    );
+    assert_eq!(candidates("todo in:/elsewhere"), None);
+}

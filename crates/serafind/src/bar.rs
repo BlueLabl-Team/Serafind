@@ -45,6 +45,8 @@ pub struct Bar {
     searched: Option<(String, SearchMode, usize)>,
     /// The line and tab of the last search, to keep the selection when it runs again.
     last_search: Option<(String, SearchMode)>,
+    /// The line as last typed, and when: the Content mode waits for a pause in typing.
+    typed: (String, std::time::Instant),
     selected: usize,
     scroll_to_selected: bool,
     completions: Vec<String>,
@@ -75,6 +77,7 @@ impl Bar {
             outcome: Outcome::default(),
             searched: None,
             last_search: None,
+            typed: (String::new(), std::time::Instant::now()),
             selected: 0,
             scroll_to_selected: false,
             completions: Vec::new(),
@@ -151,7 +154,9 @@ impl Bar {
             Ok(()) => {
                 let behavior = &self.settings.config.behavior;
                 match action {
-                    Action::Open | Action::Reveal | Action::Launch => behavior.close_after_open,
+                    Action::Open | Action::Reveal | Action::Launch | Action::OpenAtLine { .. } => {
+                        behavior.close_after_open
+                    }
                     Action::Terminal => behavior.close_after_terminal,
                 }
             }
@@ -224,8 +229,30 @@ impl Bar {
         if self.searched.as_ref() == Some(&key) {
             return;
         }
+        if self.typed.0 != self.line {
+            self.typed = (self.line.clone(), std::time::Instant::now());
+        }
+        // Reading files is costly: in the Content mode, wait for a pause in typing.
+        let delay = std::time::Duration::from_millis(u64::from(self.settings.config.content.typing_delay));
+        let typing = self.typed.1.elapsed();
+        let same_line = self
+            .last_search
+            .as_ref()
+            .is_some_and(|(line, _)| *line == self.line);
+        if !same_line
+            && typing < delay
+            && crate::search::understand(&self.line, self.searcher.home()).effective_mode(self.tab)
+                == SearchMode::Content
+        {
+            ctx.request_repaint_after(delay.saturating_sub(typing));
+            return;
+        }
         self.outcome = self.searcher.run(&self.line, self.tab, max);
-        if self.outcome.indexing || self.outcome.unreachable {
+        if self.outcome.searching {
+            // Ask again for what the files read since give.
+            self.searched = None;
+            ctx.request_repaint_after(std::time::Duration::from_millis(60));
+        } else if self.outcome.indexing || self.outcome.unreachable {
             // Ask again shortly: the index will be ready, or the resident process back.
             self.searched = None;
             ctx.request_repaint_after(std::time::Duration::from_millis(250));
@@ -357,9 +384,13 @@ impl Bar {
         let Some(row) = self.outcome.rows.get(index) else {
             return;
         };
-        // Opening an application starts it; the other actions are for its program.
-        let request = match (&row.app, action) {
-            (Some(app), Action::Open) => Request::Act(Action::Launch, PathBuf::from(app)),
+        // Opening an application starts it; the other actions are for its program. A file found
+        // by its content opens at the line found.
+        let request = match (&row.app, &row.line, action) {
+            (Some(app), _, Action::Open) => Request::Act(Action::Launch, PathBuf::from(app)),
+            (None, Some(line), Action::Open) => {
+                Request::Act(Action::OpenAtLine { line: line.number }, row.path.clone())
+            }
             _ => Request::Act(action, row.path.clone()),
         };
         self.requests.push(request);
@@ -574,8 +605,9 @@ impl Bar {
 
     fn results(&mut self, ui: &mut Ui) {
         let rows_layout = self.settings.config.layout.rows;
-        let row_height = f32::from(self.settings.config.bar.row_height)
-            * if rows_layout == Rows::Double { 1.4 } else { 1.0 };
+        // Files found by their content show the line found under the name.
+        let two_lines = rows_layout == Rows::Double || self.outcome.rows.iter().any(|row| row.line.is_some());
+        let row_height = f32::from(self.settings.config.bar.row_height) * if two_lines { 1.4 } else { 1.0 };
         let visible = f32::from(self.settings.config.bar.visible_results);
         let single_click = self.settings.config.behavior.click == Click::Single;
         let mut clicked = None;
@@ -625,6 +657,87 @@ impl Bar {
                 Some(ctx.load_texture(path.to_string_lossy(), image, options))
             })
             .clone()
+    }
+
+    /// A file found by its content: its name and folder, and under them the line found with its
+    /// number; how many lines match on the right.
+    #[expect(clippy::too_many_arguments, reason = "the places computed by result_row")]
+    fn content_row(
+        &self,
+        ui: &Ui,
+        painter: &egui::Painter,
+        row: &Row,
+        line: &serafind_ipc::Line,
+        x: f32,
+        mut right: f32,
+        middle: f32,
+    ) {
+        let theme = &self.settings.theme;
+        let colors = &theme.colors;
+        let size = f32::from(self.settings.config.bar.font_size);
+        let secondary = color(colors.text_secondary);
+        if line.count > 1 {
+            let count = painter.text(
+                egui::pos2(right, middle),
+                egui::Align2::RIGHT_CENTER,
+                format!("×{}", line.count),
+                FontId::proportional(size * 0.8),
+                secondary,
+            );
+            right = count.left() - 10.0;
+        }
+        let width = (right - x).max(0.0);
+        let mut top = LayoutJob::default();
+        top.append(
+            &row.name,
+            0.0,
+            TextFormat::simple(FontId::proportional(size), color(colors.text_primary)),
+        );
+        top.append(
+            &row.location,
+            12.0,
+            TextFormat::simple(FontId::proportional(size * 0.8), secondary),
+        );
+        top.wrap.max_width = width;
+        top.wrap.max_rows = 1;
+        top.wrap.break_anywhere = true;
+        let mut bottom = LayoutJob::default();
+        let small = size * 0.85;
+        bottom.append(
+            &format!("{}:", line.number),
+            0.0,
+            TextFormat::simple(FontId::monospace(small), secondary),
+        );
+        let normal = TextFormat::simple(FontId::monospace(small), color(colors.text_primary));
+        let strong = TextFormat::simple(FontId::monospace(small), color(colors.accent));
+        let mut highlighted = line.highlights.iter().peekable();
+        let mut first = true;
+        for (index, character) in line.text.chars().enumerate() {
+            let is_highlighted = highlighted
+                .next_if_eq(&&u32::try_from(index).unwrap_or(u32::MAX))
+                .is_some();
+            let mut buffer = [0; 4];
+            bottom.append(
+                character.encode_utf8(&mut buffer),
+                if first { 6.0 } else { 0.0 },
+                if is_highlighted {
+                    strong.clone()
+                } else {
+                    normal.clone()
+                },
+            );
+            first = false;
+        }
+        bottom.wrap.max_width = width;
+        bottom.wrap.max_rows = 1;
+        bottom.wrap.break_anywhere = true;
+        let (top, bottom) = ui.fonts_mut(|fonts| (fonts.layout_job(top), fonts.layout_job(bottom)));
+        painter.galley(
+            egui::pos2(x, middle - top.size().y - 1.0),
+            top,
+            color(colors.text_primary),
+        );
+        painter.galley(egui::pos2(x, middle + 2.0), bottom, color(colors.text_primary));
     }
 
     fn result_row(&self, ui: &mut Ui, index: usize, row: &Row, height: f32, layout: Rows) -> egui::Response {
@@ -678,6 +791,10 @@ impl Bar {
                 color(colors.text_secondary),
             );
             right = shortcut.left() - 10.0;
+        }
+        if let Some(line) = &row.line {
+            self.content_row(ui, &painter, row, line, x, right, middle);
+            return response;
         }
         let name_job = name_job(&row.name, &row.highlights, theme, size);
         let name_galley = ui.fonts_mut(|fonts| fonts.layout_job(name_job));
@@ -752,6 +869,17 @@ impl Bar {
         let outcome = &self.outcome;
         let status = if let Some(notice) = &self.notice {
             notice.clone()
+        } else if let Some(problem) = &outcome.problem {
+            problem.clone()
+        } else if outcome.searching {
+            let percent = strings
+                .searching
+                .replace("{percent}", &outcome.progress.unwrap_or(0).to_string());
+            if outcome.total == 0 {
+                percent
+            } else {
+                format!("{} · {percent}", strings.count(outcome.rows.len(), outcome.total))
+            }
         } else if outcome.unreachable {
             strings.unreachable.to_owned()
         } else if outcome.indexing {

@@ -26,6 +26,10 @@ impl Instance {
         for file in ["data/Documents/facture-2026.pdf", "data/notes.txt"] {
             folder.child(file).touch().unwrap();
         }
+        folder
+            .child("data/Projects/main.rs")
+            .write_str("fn main() {\n    // TODO: fix the parser\n}\n")
+            .unwrap();
         let settings = folder.path().join("settings");
         std::fs::create_dir_all(&settings).unwrap();
         let data = folder.path().join("data");
@@ -191,4 +195,40 @@ fn actions_are_done_by_the_resident_process() {
         Response::Error { message } => assert!(message.contains("no longer exists"), "{message}"),
         other => panic!("expected an error, got {other:?}"),
     }
+}
+
+#[test]
+fn content_search_reads_the_files() {
+    let instance = Instance::new("content");
+    assert!(instance.run(&[]).status.success());
+    instance.wait_for_index();
+    let search = Request::Search {
+        line: "todo: fix".to_owned(),
+        mode: serafind_ipc::Mode::Content,
+        max: 10,
+    };
+    // Ask again while it is reading, as the bar does.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let results = loop {
+        let Ok(Response::Results(results)) = instance.call(&search) else {
+            panic!("no results");
+        };
+        if !results.searching || std::time::Instant::now() > deadline {
+            break results;
+        }
+    };
+    assert_eq!(results.total, 1);
+    let row = &results.rows[0];
+    assert_eq!(row.name, "main.rs");
+    let line = row.line.as_ref().unwrap();
+    assert_eq!((line.number, line.text.as_str()), (2, "// TODO: fix the parser"));
+    let bad = Request::Search {
+        line: "re:\"(\"".to_owned(),
+        mode: serafind_ipc::Mode::All,
+        max: 10,
+    };
+    let Ok(Response::Results(results)) = instance.call(&bad) else {
+        panic!("no results");
+    };
+    assert!(results.problem.unwrap().contains("not a valid expression"));
 }

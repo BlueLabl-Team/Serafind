@@ -18,8 +18,9 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 pub use config::{
-    Actions, AppIcons, Appearance, Backend, BarKeys, BarSettings, Behavior, Chips, Click, Config, Escape,
-    IconSet, IndexSettings, Layout, ModeSelector, Rows, Screen, Shortcut, Tray, Window,
+    Actions, AppIcons, Appearance, Backend, BarKeys, BarSettings, Behavior, Chips, Click, Config,
+    ContentSettings, Escape, IconSet, IndexSettings, Layout, ModeSelector, Rows, Screen, Shortcut, Tray,
+    Window,
 };
 pub use error::SettingsError;
 pub use keys::{Key, Keys, Modifiers};

@@ -156,6 +156,25 @@ fn content_text_and_name_words_combine() {
 }
 
 #[test]
+fn regular_expressions_for_the_content() {
+    let query = parse_line(r#"todo re:"fix(me)?" -re:wip\d"#);
+    assert_eq!(query.mode, Some(Content));
+    assert_eq!(query.content_patterns, strings(&["fix(me)?"]));
+    assert_eq!(query.excluded_content_patterns, strings(&["wip\\d"]));
+    assert!(query.content.is_empty());
+    assert!(!query.has_errors());
+    assert_eq!(parse_line("re:").parts[0].error, Some(PartError::MissingContent));
+}
+
+#[test]
+fn words_are_the_content_phrase() {
+    let query = parse_line("todo fix -draft c:urgent -c:done");
+    let (wanted, unwanted) = query.content_texts();
+    assert_eq!(wanted, strings(&["todo fix", "urgent"]));
+    assert_eq!(unwanted, strings(&["draft", "done"]));
+}
+
+#[test]
 fn content_filter_needs_a_text() {
     let query = parse_line("c: report");
     assert_eq!(errors(&query), [Some(PartError::MissingContent), None]);

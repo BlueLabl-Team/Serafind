@@ -40,6 +40,8 @@ pub struct Row {
     pub app: Option<String>,
     /// For an application: its icon file.
     pub icon: Option<PathBuf>,
+    /// Content mode: the first matching line of the file.
+    pub line: Option<serafind_ipc::Line>,
 }
 
 /// What a search gave.
@@ -65,6 +67,12 @@ pub struct Outcome {
     pub indexing: bool,
     /// The resident process could not be reached.
     pub unreachable: bool,
+    /// Content mode: files are still being read.
+    pub searching: bool,
+    /// Content mode: how much of the files was read, in percent.
+    pub progress: Option<u8>,
+    /// Why the search could not run.
+    pub problem: Option<String>,
 }
 
 enum Source {
@@ -252,6 +260,7 @@ pub fn search(
         fuzzy,
         outside_index,
         indexing: wants_files && index.is_none(),
+        ..Results::default()
     }
 }
 
@@ -306,6 +315,7 @@ fn search_apps(
                 highlights,
                 app: Some(app.id.clone()),
                 icon: app.icon.as_ref().map(|icon| icon.to_string_lossy().into_owned()),
+                line: None,
             })
         })
         .collect();
@@ -349,6 +359,7 @@ fn file_rows(
                 highlights,
                 app: None,
                 icon: None,
+                line: None,
             }
         })
         .collect()
@@ -362,6 +373,9 @@ fn fill(outcome: &mut Outcome, results: Results) {
     outcome.is_fuzzy = results.fuzzy;
     outcome.outside_index = results.outside_index;
     outcome.indexing = results.indexing;
+    outcome.searching = results.searching;
+    outcome.progress = results.progress;
+    outcome.problem = results.problem;
     outcome.rows = results
         .rows
         .into_iter()
@@ -373,6 +387,7 @@ fn fill(outcome: &mut Outcome, results: Results) {
             highlights: row.highlights.into_iter().map(|index| index as usize).collect(),
             app: row.app,
             icon: row.icon.map(PathBuf::from),
+            line: row.line,
         })
         .collect();
 }

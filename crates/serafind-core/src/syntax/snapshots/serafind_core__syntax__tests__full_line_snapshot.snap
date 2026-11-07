@@ -87,6 +87,8 @@ Query {
     excluded_extensions: [],
     content: [],
     excluded_content: [],
+    content_patterns: [],
+    excluded_content_patterns: [],
     mode: Some(
         Apps,
     ),
