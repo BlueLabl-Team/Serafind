@@ -48,44 +48,93 @@ pub enum Key {
     PageDown,
     /// The key above Tab (`` ` `` on many layouts).
     Grave,
+    /// Escape.
+    Escape,
+    /// Backspace.
+    Backspace,
+    /// Arrow up.
+    Up,
+    /// Arrow down.
+    Down,
+    /// Arrow left.
+    Left,
+    /// Arrow right.
+    Right,
+}
+
+/// Modifier keys alone, for settings such as "Ctrl" (+ a digit).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[expect(clippy::struct_excessive_bools, reason = "one flag per modifier key")]
+pub struct Modifiers {
+    /// Ctrl.
+    pub ctrl: bool,
+    /// Alt.
+    pub alt: bool,
+    /// Shift.
+    pub shift: bool,
+    /// Super.
+    pub logo: bool,
+}
+
+impl Modifiers {
+    /// Reads `Ctrl`, `Alt+Shift`... (at least one modifier).
+    ///
+    /// # Errors
+    /// An unknown or empty modifier.
+    pub fn parse(text: &str) -> Result<Self, String> {
+        let mut modifiers = Self::default();
+        for part in text.split('+').map(str::trim) {
+            *modifiers.slot(part, text)? = true;
+        }
+        Ok(modifiers)
+    }
+
+    fn slot(&mut self, name: &str, text: &str) -> Result<&mut bool, String> {
+        Ok(match name.to_ascii_lowercase().as_str() {
+            "ctrl" | "control" => &mut self.ctrl,
+            "alt" | "option" => &mut self.alt,
+            "shift" => &mut self.shift,
+            "super" | "win" | "windows" | "meta" | "logo" | "cmd" | "command" => &mut self.logo,
+            "" => return Err(format!("{text:?} has an empty part")),
+            other => {
+                return Err(format!(
+                    "unknown modifier {other:?} (use Ctrl, Alt, Shift or Super)"
+                ));
+            }
+        })
+    }
+
+    /// How many modifiers are held.
+    #[must_use]
+    pub fn count(self) -> usize {
+        [self.ctrl, self.alt, self.shift, self.logo]
+            .into_iter()
+            .filter(|&on| on)
+            .count()
+    }
 }
 
 impl Keys {
-    /// Reads `Super+F`, `ctrl+alt+space`, `F12`...
+    /// Reads a global shortcut: `Super+F`, `ctrl+alt+space`, `F12`...
     ///
     /// # Errors
     /// A message saying what is wrong: unknown modifier or key, no key, or a key that would be
     /// taken from normal typing (a letter, digit or space without Ctrl, Alt or Super).
     pub fn parse(text: &str) -> Result<Self, String> {
-        let parts: Vec<&str> = text.split('+').map(str::trim).collect();
-        let Some((key, modifiers)) = parts.split_last() else {
-            return Err("is empty".to_owned());
-        };
-        let mut keys = Self {
-            ctrl: false,
-            alt: false,
-            shift: false,
-            logo: false,
-            key: Key::parse(key)?,
-        };
-        for modifier in modifiers {
-            let slot = match modifier.to_ascii_lowercase().as_str() {
-                "ctrl" | "control" => &mut keys.ctrl,
-                "alt" | "option" => &mut keys.alt,
-                "shift" => &mut keys.shift,
-                "super" | "win" | "windows" | "meta" | "logo" | "cmd" | "command" => &mut keys.logo,
-                "" => return Err(format!("{text:?} has an empty part")),
-                other => {
-                    return Err(format!(
-                        "unknown modifier {other:?} (use Ctrl, Alt, Shift or Super)"
-                    ));
-                }
-            };
-            *slot = true;
-        }
+        let keys = Self::parse_any(text)?;
         let typing = matches!(
             keys.key,
-            Key::Letter(_) | Key::Digit(_) | Key::Space | Key::Enter | Key::Tab
+            Key::Letter(_)
+                | Key::Digit(_)
+                | Key::Space
+                | Key::Enter
+                | Key::Tab
+                | Key::Escape
+                | Key::Backspace
+                | Key::Up
+                | Key::Down
+                | Key::Left
+                | Key::Right
         );
         if typing && !(keys.ctrl || keys.alt || keys.logo) {
             return Err(format!(
@@ -93,6 +142,67 @@ impl Keys {
             ));
         }
         Ok(keys)
+    }
+
+    /// Reads a key of the search bar: `Enter`, `Ctrl+Shift+C`, `Shift+Tab`...
+    ///
+    /// # Errors
+    /// An unknown modifier or key, Super (the bar cannot see it), or a key needed to type in the
+    /// search input (a letter, digit, space or editing key without Ctrl or Alt).
+    pub fn parse_bar(text: &str) -> Result<Self, String> {
+        let keys = Self::parse_any(text)?;
+        if keys.logo {
+            return Err(format!("{text:?}: the bar cannot use Super, use Ctrl or Alt"));
+        }
+        let typing = matches!(
+            keys.key,
+            Key::Letter(_)
+                | Key::Digit(_)
+                | Key::Space
+                | Key::Backspace
+                | Key::Delete
+                | Key::Left
+                | Key::Right
+                | Key::Home
+                | Key::End
+                | Key::Grave
+        );
+        if typing && !(keys.ctrl || keys.alt) {
+            return Err(format!(
+                "{text:?} is needed to type in the search: add Ctrl or Alt"
+            ));
+        }
+        Ok(keys)
+    }
+
+    /// The modifiers held.
+    #[must_use]
+    pub fn modifiers(&self) -> Modifiers {
+        Modifiers {
+            ctrl: self.ctrl,
+            alt: self.alt,
+            shift: self.shift,
+            logo: self.logo,
+        }
+    }
+
+    fn parse_any(text: &str) -> Result<Self, String> {
+        let parts: Vec<&str> = text.split('+').map(str::trim).collect();
+        let Some((key, names)) = parts.split_last() else {
+            return Err("is empty".to_owned());
+        };
+        let key = Key::parse(key)?;
+        let mut modifiers = Modifiers::default();
+        for name in names {
+            *modifiers.slot(name, text)? = true;
+        }
+        Ok(Self {
+            ctrl: modifiers.ctrl,
+            alt: modifiers.alt,
+            shift: modifiers.shift,
+            logo: modifiers.logo,
+            key,
+        })
     }
 
     /// The shortcut in the XDG shortcuts format the desktop portals use (`LOGO+f`).
@@ -123,6 +233,12 @@ impl Keys {
             Key::PageUp => "Page_Up".to_owned(),
             Key::PageDown => "Page_Down".to_owned(),
             Key::Grave => "grave".to_owned(),
+            Key::Escape => "Escape".to_owned(),
+            Key::Backspace => "BackSpace".to_owned(),
+            Key::Up => "Up".to_owned(),
+            Key::Down => "Down".to_owned(),
+            Key::Left => "Left".to_owned(),
+            Key::Right => "Right".to_owned(),
         });
         parts.join("+")
     }
@@ -161,6 +277,12 @@ impl Key {
             "pageup" | "page_up" | "pgup" => Self::PageUp,
             "pagedown" | "page_down" | "pgdn" => Self::PageDown,
             "grave" | "backquote" => Self::Grave,
+            "escape" | "esc" => Self::Escape,
+            "backspace" => Self::Backspace,
+            "up" | "arrowup" => Self::Up,
+            "down" | "arrowdown" => Self::Down,
+            "left" | "arrowleft" => Self::Left,
+            "right" | "arrowright" => Self::Right,
             "" => return Err("has no key after the last +".to_owned()),
             other => return Err(format!("unknown key {other:?}")),
         })
@@ -218,8 +340,41 @@ mod tests {
     #[case("Shift+Space", "normal typing")]
     #[case("F25", "unknown key")]
     #[case("Ctrl++F", "empty part")]
+    #[case("Escape", "normal typing")]
     fn bad_shortcuts(#[case] text: &str, #[case] problem: &str) {
         let error = Keys::parse(text).unwrap_err();
         assert!(error.contains(problem), "{text:?}: {error}");
+    }
+
+    #[rstest]
+    #[case("Enter", false, false, Key::Enter)]
+    #[case("Ctrl+Shift+C", true, true, Key::Letter('C'))]
+    #[case("Shift+Tab", false, true, Key::Tab)]
+    #[case("Esc", false, false, Key::Escape)]
+    #[case("PageDown", false, false, Key::PageDown)]
+    #[case("Down", false, false, Key::Down)]
+    fn bar_keys(#[case] text: &str, #[case] ctrl: bool, #[case] shift: bool, #[case] key: Key) {
+        let keys = Keys::parse_bar(text).unwrap();
+        assert_eq!((keys.ctrl, keys.shift, keys.key), (ctrl, shift, key));
+    }
+
+    #[rstest]
+    #[case("C", "type in the search")]
+    #[case("Shift+C", "type in the search")]
+    #[case("Backspace", "type in the search")]
+    #[case("Super+T", "cannot use Super")]
+    #[case("Ctrl+Banana", "unknown key")]
+    fn bad_bar_keys(#[case] text: &str, #[case] problem: &str) {
+        let error = Keys::parse_bar(text).unwrap_err();
+        assert!(error.contains(problem), "{text:?}: {error}");
+    }
+
+    #[test]
+    fn modifiers_alone() {
+        let modifiers = Modifiers::parse("ctrl + Shift").unwrap();
+        assert!(modifiers.ctrl && modifiers.shift && !modifiers.alt);
+        assert_eq!(modifiers.count(), 2);
+        assert!(Modifiers::parse("Ctrl+F").is_err());
+        assert!(Modifiers::parse("").is_err());
     }
 }

@@ -3,6 +3,7 @@
 //! `serafind` starts the resident process in the background, or opens / closes the bar when it
 //! already runs. The resident process starts the bar process (`serafind bar`) when needed.
 
+mod actions;
 mod app;
 mod bar;
 mod completion;
@@ -201,6 +202,11 @@ fn send(client: &mut Client, request: &Request) -> ExitCode {
     match client.call(request) {
         Ok(Response::Ok) => {
             if *request == Request::Quit {
+                // Wait until it has let the socket go, so that a new start right after works.
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+                while Client::connect().is_ok() && std::time::Instant::now() < deadline {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
                 println!("Serafind stopped.");
             }
             ExitCode::SUCCESS

@@ -7,7 +7,7 @@ use eframe::egui::{self, Key, Modifiers};
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use serafind_index::{Index, Kind};
-use serafind_settings::{Escape, SystemMode};
+use serafind_settings::{Click, Escape, SystemMode};
 
 use super::*;
 use crate::search::SharedIndex;
@@ -111,7 +111,10 @@ fn arrows_move_the_selection_and_enter_opens() {
     assert_eq!(harness.state().selected(), 1);
     press(&mut harness, Modifiers::NONE, Key::Enter);
     let expected = harness.state().outcome().rows[1].path.clone();
-    assert_eq!(harness.state_mut().take_requests(), [Request::Open(expected)]);
+    assert_eq!(
+        harness.state_mut().take_requests(),
+        [Request::Act(Action::Open, expected)]
+    );
 }
 
 #[test]
@@ -124,23 +127,130 @@ fn ctrl_enter_reveals_and_alt_number_opens() {
     assert_eq!(
         harness.state_mut().take_requests(),
         [
-            Request::Reveal(rows[0].path.clone()),
-            Request::Open(rows[1].path.clone())
+            Request::Act(Action::Reveal, rows[0].path.clone()),
+            Request::Act(Action::Open, rows[1].path.clone())
         ]
     );
 }
 
 #[test]
-fn clicking_a_row_opens_it() {
+fn a_click_selects_and_a_double_click_opens() {
     let mut harness = default_harness();
+    type_text(&mut harness, "fact");
+    let second = harness.state().outcome().rows[1].clone();
+    harness.get_by_label(&second.name).click();
+    harness.run();
+    assert_eq!(harness.state().selected(), 1);
+    assert!(harness.state_mut().take_requests().is_empty());
+    // The harness moves time by a quarter of a second per frame: allow slower double clicks.
+    harness
+        .ctx
+        .options_mut(|options| options.input_options.max_double_click_delay = 5.0);
+    harness.get_by_label(&second.name).click();
+    harness.step();
+    harness.get_by_label(&second.name).click();
+    harness.run();
+    assert_eq!(
+        harness.state_mut().take_requests(),
+        [Request::Act(Action::Open, second.path)]
+    );
+}
+
+#[test]
+fn a_single_click_can_open() {
+    let mut settings = Settings::defaults(SystemMode::Dark);
+    settings.config.behavior.click = Click::Single;
+    let mut harness = harness(bar_with(settings, index_of(&FILES), Path::new(HOME)));
     type_text(&mut harness, "readme");
     harness.get_by_label("README.md").click();
     harness.run();
     assert_eq!(
         harness.state_mut().take_requests(),
-        [Request::Open(PathBuf::from(
-            "/home/me/Projects/serafind/README.md"
-        ))]
+        [Request::Act(
+            Action::Open,
+            PathBuf::from("/home/me/Projects/serafind/README.md")
+        )]
+    );
+}
+
+#[test]
+fn copy_keys_copy_the_path_or_the_name() {
+    let mut harness = default_harness();
+    type_text(&mut harness, "readme");
+    // Text selected in the input: Ctrl+C copies it, not the path.
+    press(&mut harness, Modifiers::COMMAND, Key::A);
+    press(&mut harness, Modifiers::COMMAND, Key::C);
+    assert_eq!(harness.state().notice(), None);
+    press(&mut harness, Modifiers::NONE, Key::End);
+    press(&mut harness, Modifiers::COMMAND | Modifiers::SHIFT, Key::C);
+    assert_eq!(harness.state().notice(), Some("Name copied"));
+    press(&mut harness, Modifiers::COMMAND, Key::C);
+    assert_eq!(harness.state().notice(), Some("Path copied"));
+    assert!(
+        harness.state_mut().take_requests().is_empty(),
+        "the bar stays open"
+    );
+}
+
+#[test]
+fn the_copy_event_of_the_window_copies_the_path() {
+    // The real window sends Ctrl+C as a Copy event, not as a key.
+    let mut harness = default_harness();
+    type_text(&mut harness, "readme");
+    harness.event(egui::Event::Copy);
+    harness.run();
+    assert_eq!(harness.state().notice(), Some("Path copied"));
+}
+
+#[test]
+fn the_selection_stays_when_the_settings_are_reloaded() {
+    let mut harness = default_harness();
+    type_text(&mut harness, "fact");
+    press(&mut harness, Modifiers::NONE, Key::ArrowDown);
+    let settings = harness.state().settings().clone();
+    harness.state_mut().set_settings(settings);
+    harness.run();
+    assert_eq!(harness.state().selected(), 1);
+    type_text(&mut harness, "u");
+    assert_eq!(harness.state().selected(), 0, "a new search starts at the top");
+}
+
+#[test]
+fn ctrl_t_opens_a_terminal() {
+    let mut harness = default_harness();
+    type_text(&mut harness, "readme");
+    press(&mut harness, Modifiers::COMMAND, Key::T);
+    assert_eq!(
+        harness.state_mut().take_requests(),
+        [Request::Act(
+            Action::Terminal,
+            PathBuf::from("/home/me/Projects/serafind/README.md")
+        )]
+    );
+}
+
+#[test]
+fn keys_come_from_the_settings() {
+    let mut settings = Settings::defaults(SystemMode::Dark);
+    settings.config.keys.open = "Ctrl+O".to_owned();
+    settings.config.keys.close = "Ctrl+Q".to_owned();
+    settings.config.keys.next_result = "Ctrl+J".to_owned();
+    let mut harness = harness(bar_with(settings, index_of(&FILES), Path::new(HOME)));
+    type_text(&mut harness, "fact");
+    press(&mut harness, Modifiers::NONE, Key::Escape);
+    press(&mut harness, Modifiers::NONE, Key::Enter);
+    assert!(
+        harness.state_mut().take_requests().is_empty(),
+        "the old keys do nothing"
+    );
+    press(&mut harness, Modifiers::COMMAND, Key::J);
+    assert_eq!(harness.state().selected(), 1);
+    press(&mut harness, Modifiers::COMMAND, Key::O);
+    press(&mut harness, Modifiers::COMMAND, Key::Q);
+    let second = harness.state().outcome().rows[1].path.clone();
+    assert_eq!(
+        harness.state_mut().take_requests(),
+        [Request::Act(Action::Open, second), Request::Close]
     );
 }
 

@@ -23,8 +23,11 @@ impl SettingsWatcher {
             let Ok(events) = result else {
                 return;
             };
+            // Reading a file (opening it) is not a change: without this, loading the settings
+            // would report a change, which would load them again, forever.
             let touches_settings = events
                 .iter()
+                .filter(|event| !matches!(event.kind, notify::EventKind::Access(_)))
                 .flat_map(|event| event.paths.iter())
                 .any(|path| is_settings_file(path));
             if touches_settings {
@@ -80,6 +83,25 @@ mod tests {
         assert!(
             changes.recv_timeout(Duration::from_secs(5)).is_ok(),
             "theme change reported"
+        );
+    }
+
+    #[test]
+    fn reading_the_settings_is_not_a_change() {
+        let dir = TempDir::new().unwrap();
+        crate::write_defaults(dir.path()).unwrap();
+        let (sender, changes) = mpsc::channel();
+        let _watcher = SettingsWatcher::start(dir.path(), Duration::from_millis(50), move || {
+            let _ = sender.send(());
+        })
+        .unwrap();
+        for _ in 0..3 {
+            let _ = std::fs::read_to_string(dir.path().join("config.toml")).unwrap();
+            let _ = crate::load(dir.path(), crate::SystemMode::Dark).unwrap();
+        }
+        assert!(
+            changes.recv_timeout(Duration::from_millis(500)).is_err(),
+            "reading is not reported"
         );
     }
 }
