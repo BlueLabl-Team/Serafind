@@ -245,7 +245,11 @@ fn start_with_the_session_is_applied_live() {
     assert!(!file.exists());
     let config = instance.settings.join("config.toml");
     let text = std::fs::read_to_string(&config).unwrap();
-    std::fs::write(&config, text.replace("with_session = false", "with_session = true")).unwrap();
+    std::fs::write(
+        &config,
+        text.replace("with_session = false", "with_session = true"),
+    )
+    .unwrap();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     while !file.exists() && std::time::Instant::now() < deadline {
         std::thread::sleep(std::time::Duration::from_millis(50));

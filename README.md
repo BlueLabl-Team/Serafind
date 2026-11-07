@@ -109,7 +109,7 @@ On Linux, Serafind writes `~/.local/share/applications/io.github.bluelabl_team.S
 
 Off by default; turn it on with `[tray] enabled = true` in `config.toml`. A click on the icon opens or closes the bar; its menu opens the bar, indexes again, opens the settings folder or quits Serafind. `serafind status` tells whether it is shown.
 
-- **Linux:** KDE and most desktops show it. **GNOME** needs the [AppIndicator and KStatusNotifierItem Support](https://extensions.gnome.org/extension/615/appindicator-support/) extension (`gnome-shell-extension-appindicator` on Fedora); restart Serafind after installing it.
+- **Linux:** KDE and most desktops show it. **GNOME** needs the [AppIndicator and KStatusNotifierItem Support](https://extensions.gnome.org/extension/615/appindicator-support/) extension (`gnome-shell-extension-appindicator` on Fedora). When the notification area is not there yet (at login, or before the extension is turned on), the icon waits for it and appears as soon as it comes.
 - **Windows:** in the notification area of the taskbar.
 
 Messages of the background process go to `~/.local/state/serafind/serafind.log` (Linux) or the local application data folder (Windows).
