@@ -10,6 +10,7 @@
 
 mod config;
 mod error;
+mod keys;
 mod theme;
 mod watch;
 
@@ -21,6 +22,7 @@ pub use config::{
     ModeSelector, Rows, Screen, Shortcut, Window,
 };
 pub use error::SettingsError;
+pub use keys::{Key, Keys};
 pub use theme::{BUILT_IN, Color, Colors, Font, IconColors, Icons, Shape, Theme, ThemeMode};
 pub use watch::SettingsWatcher;
 

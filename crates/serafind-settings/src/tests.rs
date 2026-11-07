@@ -95,6 +95,8 @@ fn appearance_overrides_the_theme() {
 #[case("[bar]\nvisible_results = 20\nmax_results = 10\n", 3, "bar.max_results")]
 #[case("[bar]\nfont_size = 100\n", 2, "bar.font_size")]
 #[case("[window]\ntop = 2.0\n", 2, "window.top")]
+#[case("[shortcut]\ntoggle = \"Super+Banana\"\n", 2, "unknown key")]
+#[case("[shortcut]\ntoggle = \"F\"\n", 2, "normal typing")]
 fn problems_are_errors_with_their_line(#[case] config: &str, #[case] line: usize, #[case] mentions: &str) {
     let dir = folder_with(config);
     let error = load(dir.path(), SystemMode::Dark).unwrap_err();
@@ -113,6 +115,7 @@ fn a_missing_theme_is_an_error() {
 #[test]
 fn shortcut_per_system() {
     let shortcut = Shortcut {
+        enabled: true,
         toggle: "Super+F".to_owned(),
         windows: Some("Ctrl+Alt+Space".to_owned()),
         linux: None,

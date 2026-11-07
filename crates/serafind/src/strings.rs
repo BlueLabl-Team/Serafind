@@ -30,6 +30,8 @@ pub struct Strings {
     pub action_not_ready: &'static str,
     /// Prefix of a settings error.
     pub settings_error: &'static str,
+    /// Prefix of a global shortcut problem.
+    pub no_shortcut: &'static str,
     /// Footer counter for one result.
     pub one_result: &'static str,
     /// Footer counter, `{total}` replaced.
@@ -66,6 +68,7 @@ impl Strings {
         path_copied: "Path copied",
         action_not_ready: "Opening comes in a later version",
         settings_error: "Settings not applied",
+        no_shortcut: "No global shortcut",
         one_result: "1 result",
         results: "{total} results",
         results_of: "{shown} of {total}",

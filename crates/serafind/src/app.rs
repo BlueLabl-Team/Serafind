@@ -99,6 +99,24 @@ impl Link {
     }
 }
 
+/// What the bar process starts with.
+pub struct Startup {
+    /// The settings (or the defaults when they could not be read).
+    pub settings: Settings,
+    /// Why the settings could not be read.
+    pub settings_error: Option<String>,
+    /// The settings folder, watched for changes.
+    pub settings_dir: Option<PathBuf>,
+    /// Searches through the resident process.
+    pub searcher: Searcher,
+    /// Events from the resident process.
+    pub link: Option<Link>,
+    /// The window may be hidden and kept between openings (not on Wayland).
+    pub can_hide: bool,
+    /// Why there is no global shortcut, shown in the footer.
+    pub shortcut_problem: Option<String>,
+}
+
 /// The application: the bar in a borderless window.
 #[expect(clippy::struct_excessive_bools, reason = "independent states of the window")]
 pub struct App {
@@ -114,6 +132,7 @@ pub struct App {
     font_family: String,
     settings_error: Option<String>,
     font_warning: Option<String>,
+    shortcut_problem: Option<String>,
     placed: bool,
     was_focused: bool,
     size: egui::Vec2,
@@ -158,18 +177,18 @@ impl Resize {
 }
 
 impl App {
-    /// Builds the app: applies the theme and watches the settings folder. `can_hide` says
-    /// whether the window may be hidden and kept between openings.
+    /// Builds the app: applies the theme and watches the settings folder.
     #[must_use]
-    pub fn new(
-        ctx: &egui::Context,
-        settings: Settings,
-        settings_error: Option<String>,
-        settings_dir: Option<PathBuf>,
-        searcher: Searcher,
-        link: Option<Link>,
-        can_hide: bool,
-    ) -> Self {
+    pub fn new(ctx: &egui::Context, startup: Startup) -> Self {
+        let Startup {
+            settings,
+            settings_error,
+            settings_dir,
+            searcher,
+            link,
+            can_hide,
+            shortcut_problem,
+        } = startup;
         let settings_changed = Arc::new(AtomicBool::new(false));
         let watcher = settings_dir.as_ref().and_then(|dir| {
             let changed = Arc::clone(&settings_changed);
@@ -196,6 +215,7 @@ impl App {
             font_family,
             settings_error,
             font_warning,
+            shortcut_problem,
             placed: false,
             was_focused: false,
             size: egui::Vec2::ZERO,
@@ -245,6 +265,12 @@ impl App {
         }
         if let Some(warning) = &self.font_warning {
             problems.push(warning.clone());
+        }
+        if let Some(problem) = &self.shortcut_problem {
+            problems.push(format!(
+                "{}: {problem}",
+                crate::strings::Strings::ENGLISH.no_shortcut
+            ));
         }
         self.bar.set_problems(problems);
     }
