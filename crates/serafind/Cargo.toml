@@ -12,11 +12,13 @@ serafind-core.workspace = true
 serafind-index.workspace = true
 serafind-settings.workspace = true
 serafind-ipc.workspace = true
+serafind-apps.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 dirs.workspace = true
 eframe.workspace = true
 png.workspace = true
+resvg.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 winit.workspace = true

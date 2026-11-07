@@ -14,9 +14,10 @@ use serafind_ipc::{
 };
 use serafind_settings::{IndexSettings, Settings, SettingsWatcher, SystemMode};
 
-use crate::search::{SharedIndex, from_wire_mode, search_index, understand};
+use crate::search::{SharedApps, SharedIndex, from_wire_mode, search, understand};
 use crate::shortcut::{Shortcut, ShortcutState};
 use crate::tray::{Action, Tray};
+use crate::usage::Usage;
 
 /// How long a bar process may take to connect before another one may be started.
 const BAR_START_TIMEOUT: Duration = Duration::from_secs(5);
@@ -51,6 +52,10 @@ pub fn run(settings_dir: Option<PathBuf>, home: PathBuf) -> io::Result<()> {
         live_index: Mutex::new(None),
         index_settings: Mutex::new(settings.config.index.clone()),
         terminal: Mutex::new(settings.config.actions.terminal.clone()),
+        apps: Arc::new(RwLock::new(Arc::new(Vec::new()))),
+        apps_watcher: Mutex::new(None),
+        usage: Mutex::new(Usage::load(Usage::default_file())),
+        learn_from_usage: AtomicBool::new(settings.config.behavior.learn_from_usage),
         bar: Mutex::new(BarState::default()),
         quitting: AtomicBool::new(false),
         shortcut: Mutex::new(None),
@@ -59,6 +64,7 @@ pub fn run(settings_dir: Option<PathBuf>, home: PathBuf) -> io::Result<()> {
         tray: Mutex::new(TrayState::default()),
     });
     daemon.start_index(&settings.config.index);
+    daemon.start_apps();
     daemon.start_shortcut(&settings.config.shortcut);
     daemon.start_tray(settings.config.tray.enabled);
     let _watcher = daemon.watch_settings();
@@ -88,6 +94,14 @@ struct Daemon {
     index_settings: Mutex<IndexSettings>,
     /// `[actions] terminal`.
     terminal: Mutex<String>,
+    /// The installed applications.
+    apps: SharedApps,
+    /// Reads the applications again when they change.
+    apps_watcher: Mutex<Option<serafind_apps::AppsWatcher>>,
+    /// How often each application was started.
+    usage: Mutex<Usage>,
+    /// `[behavior] learn_from_usage`.
+    learn_from_usage: AtomicBool,
     bar: Mutex<BarState>,
     quitting: AtomicBool,
     /// The global shortcut; replaced when `[shortcut]` changes.
@@ -194,12 +208,12 @@ impl Daemon {
                 activation_token,
             } => {
                 let terminal = self.terminal.lock().expect("terminal lock").clone();
-                match crate::actions::perform(
-                    action,
-                    Path::new(&path),
-                    &terminal,
-                    activation_token.as_deref(),
-                ) {
+                let result = if action == serafind_ipc::Action::Launch {
+                    self.launch(&path, &terminal, activation_token.as_deref())
+                } else {
+                    crate::actions::perform(action, Path::new(&path), &terminal, activation_token.as_deref())
+                };
+                match result {
                     Ok(()) => Response::Ok,
                     Err(message) => {
                         eprintln!("serafind: {message}");
@@ -396,19 +410,69 @@ impl Daemon {
         }
     }
 
+    /// Starts the application `id`, and counts it when learning from usage.
+    fn launch(&self, id: &str, terminal: &str, token: Option<&str>) -> Result<(), String> {
+        let apps = self.apps.read().map(|apps| Arc::clone(&apps)).unwrap_or_default();
+        let app = apps
+            .iter()
+            .find(|app| app.id == id)
+            .ok_or_else(|| format!("{id} is no longer installed"))?;
+        crate::actions::launch(app, terminal, token)?;
+        if self.learn_from_usage.load(Ordering::Acquire)
+            && let Err(error) = self.usage.lock().expect("usage lock").record(id)
+        {
+            eprintln!("serafind: cannot save the usage counts: {error}");
+        }
+        Ok(())
+    }
+
+    /// Reads the installed applications in the background, and again when they change.
+    fn start_apps(self: &Arc<Self>) {
+        let read = {
+            let apps = Arc::clone(&self.apps);
+            move || {
+                let started = Instant::now();
+                let found = serafind_apps::discover();
+                eprintln!(
+                    "serafind: {} applications found in {:.0?}",
+                    found.len(),
+                    started.elapsed()
+                );
+                if let Ok(mut apps) = apps.write() {
+                    *apps = Arc::new(found);
+                }
+            }
+        };
+        std::thread::spawn(read.clone());
+        match serafind_apps::AppsWatcher::start(
+            &serafind_apps::application_folders(),
+            Duration::from_secs(1),
+            read,
+        ) {
+            Ok(watcher) => *self.apps_watcher.lock().expect("apps watcher lock") = Some(watcher),
+            Err(error) => eprintln!("serafind: cannot watch the applications: {error}"),
+        }
+    }
+
     fn search(&self, line: &str, mode: serafind_ipc::Mode, max: u32) -> Results {
         let query = understand(line, &self.home);
+        let apps = self.apps.read().map(|apps| Arc::clone(&apps)).unwrap_or_default();
         let index = self.index.read().ok().and_then(|index| index.clone());
-        let Some(index) = index else {
-            return Results {
-                indexing: true,
-                ..Results::default()
-            };
-        };
-        let Ok(index) = index.read() else {
-            return Results::default();
-        };
-        search_index(&index, &query, from_wire_mode(mode), max as usize, &self.home)
+        let index = index.as_ref().and_then(|index| index.read().ok());
+        let usage = self.usage.lock().expect("usage lock");
+        let launches = self
+            .learn_from_usage
+            .load(Ordering::Acquire)
+            .then(|| usage.launches());
+        search(
+            index.as_deref(),
+            &apps,
+            launches,
+            &query,
+            from_wire_mode(mode),
+            max as usize,
+            &self.home,
+        )
     }
 
     /// Builds the index in the background, then keeps it up to date.
@@ -460,6 +524,9 @@ impl Daemon {
                 .actions
                 .terminal
                 .clone_into(&mut daemon.terminal.lock().expect("terminal lock"));
+            daemon
+                .learn_from_usage
+                .store(settings.config.behavior.learn_from_usage, Ordering::Release);
             daemon.start_shortcut(&settings.config.shortcut);
             daemon.start_tray(settings.config.tray.enabled);
         })
