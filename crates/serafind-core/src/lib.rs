@@ -4,5 +4,8 @@
 //! and can be tested in isolation.
 
 mod mode;
+pub mod syntax;
+pub mod text;
 
 pub use mode::SearchMode;
+pub use syntax::{ParseContext, Part, PartError, PartKind, Query, parse};

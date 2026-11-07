@@ -8,6 +8,7 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+nucleo-matcher.workspace = true
 
 
 [dev-dependencies]
