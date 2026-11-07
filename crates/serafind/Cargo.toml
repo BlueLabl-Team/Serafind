@@ -30,6 +30,7 @@ futures-lite.workspace = true
 global-hotkey.workspace = true
 async-io.workspace = true
 ksni.workspace = true
+libc.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 global-hotkey.workspace = true

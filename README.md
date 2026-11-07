@@ -81,14 +81,19 @@ The **Apps** mode, and the top of the **All** mode, list the installed applicati
 
 ```sh
 serafind            # start Serafind in the background (or open / close the bar if it runs)
+serafind start      # start Serafind in the background if it does not run (used with the session)
 serafind toggle     # open the bar, or close it
 serafind show       # open the bar
 serafind hide       # close the bar
 serafind status     # is it running? how big is the index?
 serafind quit       # stop Serafind
 serafind daemon     # run in this terminal, to see its messages
-serafind uninstall  # remove what Serafind added to the desktop (its .desktop file and logo)
+serafind uninstall  # remove what Serafind added to the desktop (.desktop file, logo, start with the session)
 ```
+
+### Start with the session
+
+Serafind starts when the session opens (`[startup] with_session = true`, the default): an autostart entry in `~/.config/autostart` on Linux, a `Run` registry value on Windows, both running `serafind start`. Setting it to `false` removes it at once; the desktop's own settings (GNOME Tweaks, the Task Manager on Windows) can turn it off too. The index is built at low priority (CPU and disk), so that it does not slow the session down.
 
 ### Global shortcut
 
@@ -202,7 +207,7 @@ cargo insta review             # review changed snapshots
 | 5 | Actions: open, show in the file manager, copy the path or name, terminal; configurable keys | ✅ |
 | 6 | Apps mode: `.desktop` files with Flatpak and Snap (Linux), Start menu and Store apps (Windows), real icons | ✅ |
 | 7 | Content mode: on-demand parallel search, `re:` expressions, open at the line | ✅ |
-| 8 | Start with the session; settings for indexed and excluded folders applied live | ⬜ |
+| 8 | Start with the session; settings for indexed and excluded folders applied live; low-priority indexing | ✅ |
 | 9 | GitHub Actions: build, tests, releases (Linux and Windows executables) | ⬜ |
 | 10 | Integration in third-party software through their plugin / extension systems (library, IPC protocol or C ABI: to be decided) | ⬜ |
 | Later | After the first release: text of PDF and Office documents in the Content mode | ⬜ |

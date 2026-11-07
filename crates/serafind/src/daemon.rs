@@ -62,6 +62,7 @@ pub fn run(settings_dir: Option<PathBuf>, home: PathBuf) -> io::Result<()> {
         apps_watcher: Mutex::new(None),
         usage: Mutex::new(Usage::load(Usage::default_file())),
         learn_from_usage: AtomicBool::new(settings.config.behavior.learn_from_usage),
+        with_session: Mutex::new(None),
         bar: Mutex::new(BarState::default()),
         quitting: AtomicBool::new(false),
         shortcut: Mutex::new(None),
@@ -69,6 +70,7 @@ pub fn run(settings_dir: Option<PathBuf>, home: PathBuf) -> io::Result<()> {
         shortcut_state: Arc::new(Mutex::new(ShortcutState::default())),
         tray: Mutex::new(TrayState::default()),
     });
+    daemon.apply_startup(settings.config.startup.with_session);
     daemon.start_index(&settings.config.index);
     daemon.start_apps();
     daemon.start_shortcut(&settings.config.shortcut);
@@ -114,6 +116,8 @@ struct Daemon {
     usage: Mutex<Usage>,
     /// `[behavior] learn_from_usage`.
     learn_from_usage: AtomicBool,
+    /// `[startup] with_session`, as applied.
+    with_session: Mutex<Option<bool>>,
     bar: Mutex<BarState>,
     quitting: AtomicBool,
     /// The global shortcut; replaced when `[shortcut]` changes.
@@ -421,6 +425,7 @@ impl Daemon {
             .unwrap_or_default();
         let tray = self.tray.lock().expect("tray lock");
         Status {
+            with_session: self.with_session.lock().expect("startup lock").unwrap_or(false),
             tray_enabled: tray.enabled,
             tray_problem: tray.problem.clone(),
             pid: std::process::id(),
@@ -530,6 +535,20 @@ impl Daemon {
         }
     }
 
+    /// Registers Serafind to start with the session, or removes it, when the setting changed.
+    fn apply_startup(&self, with_session: bool) {
+        let mut applied = self.with_session.lock().expect("startup lock");
+        if *applied == Some(with_session) {
+            return;
+        }
+        *applied = Some(with_session);
+        match crate::autostart::apply(with_session) {
+            Ok(Some(change)) => eprintln!("serafind: start with the session: {change}"),
+            Ok(None) => {}
+            Err(error) => eprintln!("serafind: cannot change the start with the session: {error}"),
+        }
+    }
+
     /// Starts the application `id`, and counts it when learning from usage.
     fn launch(&self, id: &str, terminal: &str, token: Option<&str>) -> Result<(), String> {
         let apps = self.apps.read().map(|apps| Arc::clone(&apps)).unwrap_or_default();
@@ -606,6 +625,8 @@ impl Daemon {
         }
         let daemon = Arc::clone(self);
         std::thread::spawn(move || {
+            // The walk and the watching run in the background of the session.
+            crate::priority::lower_this_thread();
             let started = Instant::now();
             match LiveIndex::start(roots, exclusions, serafind_index::DEFAULT_DELAY) {
                 Ok(live) => {
@@ -656,6 +677,7 @@ impl Daemon {
             daemon
                 .learn_from_usage
                 .store(settings.config.behavior.learn_from_usage, Ordering::Release);
+            daemon.apply_startup(settings.config.startup.with_session);
             daemon.start_shortcut(&settings.config.shortcut);
             daemon.start_tray(settings.config.tray.enabled);
         })
