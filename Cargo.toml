@@ -1,0 +1,41 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+default-members = ["crates/serafind"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/BlueLabl-Team/Serafind"
+authors = ["BlueLabl"]
+
+[workspace.dependencies]
+serafind-core = { path = "crates/serafind-core" }
+serafind-index = { path = "crates/serafind-index" }
+
+# Tests
+rstest = "0.28"
+proptest = "1.12"
+insta = "1.49"
+assert_fs = "1.1"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
+# Snapshot tests run faster with an optimized insta/similar.
+[profile.dev.package.insta]
+opt-level = 3
+[profile.dev.package.similar]
+opt-level = 3
