@@ -62,7 +62,7 @@ fn main() -> ExitCode {
     };
 
     let window = &settings.config.window;
-    let width = f32::from(window.width) + 2.0 * f32::from(app::SHADOW_MARGIN);
+    let width = f32::from(settings.config.bar.width) + 2.0 * f32::from(app::SHADOW_MARGIN);
     let viewport = egui::ViewportBuilder::default()
         .with_title("Serafind")
         .with_app_id("serafind")

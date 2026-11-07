@@ -139,24 +139,18 @@ section! {
 }
 
 section! {
-    /// `[font]`.
+    /// `[font]` (its size is a setting of the bar, in `config.toml`).
     Font / PartialFont {
         /// `Inter` (built in), an installed font name, or a `.ttf` / `.otf` path.
         family: String,
-        /// Size in points.
-        size: u16,
     }
 }
 
 section! {
-    /// `[shape]`.
+    /// `[shape]` (dimensions are settings of the bar, in `config.toml`).
     Shape / PartialShape {
         /// Corner radius of the bar, chips and rows.
         radius: u16,
-        /// Inner spacing.
-        padding: u16,
-        /// Height of a result row.
-        row_height: u16,
         /// Whether the bar casts a shadow.
         shadow: bool,
     }
@@ -413,9 +407,11 @@ mod tests {
     #[test]
     fn themes_without_extends_start_from_dark() {
         let dir = TempDir::new().unwrap();
-        dir.child("mine.toml").write_str("[font]\nsize = 18\n").unwrap();
+        dir.child("mine.toml")
+            .write_str("[shape]\nradius = 18\n")
+            .unwrap();
         let theme = Theme::load("mine", dir.path()).unwrap();
-        assert_eq!(theme.font.size, 18);
+        assert_eq!(theme.shape.radius, 18);
         assert_eq!(theme.colors, Theme::built_in("dark").unwrap().colors);
     }
 
@@ -426,10 +422,10 @@ mod tests {
             .write_str("extends = \"light\"\n[shape]\nradius = 4\n")
             .unwrap();
         dir.child("child.toml")
-            .write_str("extends = \"base\"\n[font]\nsize = 20\n")
+            .write_str("extends = \"base\"\n[shape]\nshadow = false\n")
             .unwrap();
         let theme = Theme::load("child", dir.path()).unwrap();
-        assert_eq!((theme.shape.radius, theme.font.size), (4, 20));
+        assert_eq!((theme.shape.radius, theme.shape.shadow), (4, false));
         assert_eq!(theme.colors, Theme::built_in("light").unwrap().colors);
     }
 

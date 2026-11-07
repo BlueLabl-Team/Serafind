@@ -11,14 +11,14 @@ use serde::Deserialize;
 pub struct Config {
     /// Theme choice and overrides of its font and icons.
     pub appearance: Appearance,
-    /// Size and place of the bar.
+    /// Dimensions of the bar.
+    pub bar: BarSettings,
+    /// Place of the bar on the screen.
     pub window: Window,
     /// What the bar shows and how.
     pub layout: Layout,
     /// How the bar reacts.
     pub behavior: Behavior,
-    /// How many results.
-    pub results: Results,
     /// What is indexed.
     pub index: IndexSettings,
     /// The global shortcut.
@@ -37,18 +37,32 @@ pub struct Appearance {
     pub light_theme: String,
     /// Replaces the theme's font family.
     pub font_family: Option<String>,
-    /// Replaces the theme's font size.
-    pub font_size: Option<u16>,
     /// Replaces the theme's icon set.
     pub icons: Option<IconSet>,
 }
 
-/// `[window]`.
+/// `[bar]`: every dimension of the bar, whatever the theme.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct BarSettings {
+    /// Width of the bar, in logical pixels.
+    pub width: u16,
+    /// Inner spacing.
+    pub padding: u16,
+    /// Height of a result row.
+    pub row_height: u16,
+    /// Text size (the search input is a little larger).
+    pub font_size: u16,
+    /// Rows shown before scrolling.
+    pub visible_results: u16,
+    /// Results kept at most (scrolling).
+    pub max_results: u16,
+}
+
+/// `[window]`: where the bar appears.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Window {
-    /// Width of the bar, in logical pixels.
-    pub width: u16,
     /// Distance from the top of the screen, as a fraction of its height.
     pub top: f32,
     /// Screen where the bar opens.
@@ -146,16 +160,6 @@ pub enum Escape {
     ClearThenClose,
 }
 
-/// `[results]`.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct Results {
-    /// Rows shown before scrolling.
-    pub visible: u16,
-    /// Results kept at most.
-    pub max: u16,
-}
-
 /// `[index]`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -214,8 +218,20 @@ impl Default for Appearance {
             dark_theme: "dark".to_owned(),
             light_theme: "light".to_owned(),
             font_family: None,
-            font_size: None,
             icons: None,
+        }
+    }
+}
+
+impl Default for BarSettings {
+    fn default() -> Self {
+        Self {
+            width: 760,
+            padding: 12,
+            row_height: 38,
+            font_size: 14,
+            visible_results: 8,
+            max_results: 50,
         }
     }
 }
@@ -223,7 +239,6 @@ impl Default for Appearance {
 impl Default for Window {
     fn default() -> Self {
         Self {
-            width: 760,
             top: 0.25,
             screen: Screen::Mouse,
             backend: Backend::Wayland,
@@ -248,12 +263,6 @@ impl Default for Behavior {
             keep_last_query: false,
             escape: Escape::Close,
         }
-    }
-}
-
-impl Default for Results {
-    fn default() -> Self {
-        Self { visible: 8, max: 50 }
     }
 }
 
@@ -286,35 +295,58 @@ impl Config {
     #[must_use]
     pub fn problems(&self) -> Vec<(&'static str, String)> {
         let mut problems = Vec::new();
-        if !(200..=4000).contains(&self.window.width) {
-            problems.push(("window.width", "must be between 200 and 4000".to_owned()));
-        }
-        if !(0.0..=0.9).contains(&self.window.top) {
-            problems.push(("window.top", "must be between 0.0 and 0.9".to_owned()));
-        }
-        if !(1..=100).contains(&self.results.visible) {
-            problems.push(("results.visible", "must be between 1 and 100".to_owned()));
-        }
-        if !(1..=1000).contains(&self.results.max) {
-            problems.push(("results.max", "must be between 1 and 1000".to_owned()));
-        }
-        if self.results.max < self.results.visible {
-            problems.push((
-                "results.max",
-                "must not be smaller than results.visible".to_owned(),
-            ));
-        }
-        if let Some(size) = self.appearance.font_size
-            && !(8..=48).contains(&size)
-        {
-            problems.push(("appearance.font_size", "must be between 8 and 48".to_owned()));
-        }
-        if self.index.roots.is_empty() {
-            problems.push(("index.roots", "needs at least one folder".to_owned()));
-        }
-        if self.shortcut.for_this_system().trim().is_empty() {
-            problems.push(("shortcut.toggle", "must not be empty".to_owned()));
-        }
+        let mut check = |ok: bool, key: &'static str, problem: &str| {
+            if !ok {
+                problems.push((key, problem.to_owned()));
+            }
+        };
+        let bar = &self.bar;
+        check(
+            (200..=4000).contains(&bar.width),
+            "bar.width",
+            "must be between 200 and 4000",
+        );
+        check(bar.padding <= 64, "bar.padding", "must be between 0 and 64");
+        check(
+            (16..=120).contains(&bar.row_height),
+            "bar.row_height",
+            "must be between 16 and 120",
+        );
+        check(
+            (8..=48).contains(&bar.font_size),
+            "bar.font_size",
+            "must be between 8 and 48",
+        );
+        check(
+            (1..=100).contains(&bar.visible_results),
+            "bar.visible_results",
+            "must be between 1 and 100",
+        );
+        check(
+            (1..=1000).contains(&bar.max_results),
+            "bar.max_results",
+            "must be between 1 and 1000",
+        );
+        check(
+            bar.max_results >= bar.visible_results,
+            "bar.max_results",
+            "must not be smaller than bar.visible_results",
+        );
+        check(
+            (0.0..=0.9).contains(&self.window.top),
+            "window.top",
+            "must be between 0.0 and 0.9",
+        );
+        check(
+            !self.index.roots.is_empty(),
+            "index.roots",
+            "needs at least one folder",
+        );
+        check(
+            !self.shortcut.for_this_system().trim().is_empty(),
+            "shortcut.toggle",
+            "must not be empty",
+        );
         problems
     }
 }

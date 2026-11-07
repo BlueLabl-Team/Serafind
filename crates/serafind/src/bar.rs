@@ -136,7 +136,7 @@ impl Bar {
         let theme = self.settings.theme.clone();
         let colors = &theme.colors;
         let radius = u8::try_from(theme.shape.radius).unwrap_or(u8::MAX);
-        let padding = i8::try_from(theme.shape.padding).unwrap_or(i8::MAX);
+        let padding = i8::try_from(self.settings.config.bar.padding).unwrap_or(i8::MAX);
 
         egui::Frame::new()
             .fill(color(colors.surface_elevated))
@@ -173,7 +173,7 @@ impl Bar {
     // --- Search ---
 
     fn refresh(&mut self) {
-        let max = usize::from(self.settings.config.results.max);
+        let max = usize::from(self.settings.config.bar.max_results);
         let key = (self.line.clone(), self.tab, self.searcher.is_ready(), max);
         if self.searched.as_ref() == Some(&key) {
             return;
@@ -208,7 +208,7 @@ impl Bar {
         let pressed =
             |modifiers: Modifiers, key: Key| ctx.input_mut(|input| input.consume_key(modifiers, key));
         let rows = self.outcome.rows.len();
-        let page = usize::from(self.settings.config.results.visible).max(1);
+        let page = usize::from(self.settings.config.bar.visible_results).max(1);
 
         if pressed(Modifiers::NONE, Key::Escape) {
             if self.settings.config.behavior.escape == Escape::ClearThenClose && !self.line.is_empty() {
@@ -342,7 +342,7 @@ impl Bar {
 
     fn input_row(&mut self, ui: &mut Ui) {
         let theme = self.settings.theme.clone();
-        let size = f32::from(theme.font.size);
+        let size = f32::from(self.settings.config.bar.font_size);
         let muted = color(theme.colors.text_secondary);
         ui.horizontal(|ui| {
             if theme.icons.set == IconSet::Phosphor {
@@ -490,11 +490,10 @@ impl Bar {
     }
 
     fn results(&mut self, ui: &mut Ui) {
-        let theme = self.settings.theme.clone();
         let rows_layout = self.settings.config.layout.rows;
-        let row_height =
-            f32::from(theme.shape.row_height) * if rows_layout == Rows::Double { 1.4 } else { 1.0 };
-        let visible = f32::from(self.settings.config.results.visible);
+        let row_height = f32::from(self.settings.config.bar.row_height)
+            * if rows_layout == Rows::Double { 1.4 } else { 1.0 };
+        let visible = f32::from(self.settings.config.bar.visible_results);
         let mut clicked = None;
         egui::ScrollArea::vertical()
             .max_height(row_height * visible + 2.0)
@@ -520,7 +519,7 @@ impl Bar {
     fn result_row(&self, ui: &mut Ui, index: usize, row: &Row, height: f32, layout: Rows) -> egui::Response {
         let theme = &self.settings.theme;
         let colors = &theme.colors;
-        let size = f32::from(theme.font.size);
+        let size = f32::from(self.settings.config.bar.font_size);
         let (rect, response) =
             ui.allocate_exact_size(egui::vec2(ui.available_width(), height), Sense::click());
         response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &row.name));
@@ -733,7 +732,7 @@ fn inline_job(
 pub fn apply_theme(ctx: &egui::Context, settings: &Settings) -> Option<String> {
     let (fonts, warning) = style::fonts(&settings.theme);
     ctx.set_fonts(fonts);
-    style::apply(ctx, &settings.theme);
+    style::apply(ctx, settings);
     warning
 }
 

@@ -66,7 +66,7 @@ mod tests {
 
         dir.child("notes.txt").write_str("not a setting").unwrap();
         dir.child("config.toml")
-            .write_str("[results]\nvisible = 5\n")
+            .write_str("[bar]\nvisible_results = 5\n")
             .unwrap();
         assert!(
             changes.recv_timeout(Duration::from_secs(5)).is_ok(),
@@ -75,7 +75,7 @@ mod tests {
 
         while changes.try_recv().is_ok() {}
         dir.child("themes/mine.toml")
-            .write_str("[font]\nsize = 20\n")
+            .write_str("[shape]\nradius = 20\n")
             .unwrap();
         assert!(
             changes.recv_timeout(Duration::from_secs(5)).is_ok(),

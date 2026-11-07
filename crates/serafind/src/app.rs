@@ -89,7 +89,7 @@ impl App {
         match serafind_settings::load(dir, self.mode) {
             Ok(settings) => {
                 let previous = self.bar.settings().clone();
-                if settings.theme != previous.theme {
+                if settings.theme != previous.theme || settings.config.bar != previous.config.bar {
                     if settings.theme.font.family == self.font_family {
                         style_only(ctx, &settings);
                     } else {
@@ -98,7 +98,9 @@ impl App {
                         self.font_family.clone_from(&settings.theme.font.family);
                     }
                 }
-                if settings.config.window != previous.config.window {
+                if settings.config.window != previous.config.window
+                    || settings.config.bar.width != previous.config.bar.width
+                {
                     self.placed = false;
                 }
                 self.bar.set_settings(settings);
@@ -130,7 +132,7 @@ impl App {
             return;
         };
         let window = &self.bar.settings().config.window;
-        let width = f32::from(window.width) + 2.0 * f32::from(SHADOW_MARGIN);
+        let width = f32::from(self.bar.settings().config.bar.width) + 2.0 * f32::from(SHADOW_MARGIN);
         let x = ((monitor.x - width) / 2.0).max(0.0);
         let y = monitor.y * window.top;
         ctx.send_viewport_cmd(ViewportCommand::OuterPosition(egui::pos2(x, y)));
@@ -179,7 +181,7 @@ impl eframe::App for App {
             .response
             .rect;
 
-        let width = f32::from(self.bar.settings().config.window.width) + 2.0 * f32::from(margin);
+        let width = f32::from(self.bar.settings().config.bar.width) + 2.0 * f32::from(margin);
         let size = egui::vec2(width, content.height().ceil());
         if (size - self.size).length() > 0.5 {
             self.size = size;
@@ -235,7 +237,6 @@ impl ImeFilter {
     }
 }
 
-
 /// A soft shadow behind the bar, drawn in the transparent margin.
 fn paint_shadow(ui: &egui::Ui, theme: &serafind_settings::Theme) {
     let rect = ui.max_rect();
@@ -255,7 +256,7 @@ fn paint_shadow(ui: &egui::Ui, theme: &serafind_settings::Theme) {
 }
 
 fn style_only(ctx: &egui::Context, settings: &Settings) {
-    crate::style::apply(ctx, &settings.theme);
+    crate::style::apply(ctx, settings);
 }
 
 fn system_mode(ctx: &egui::Context) -> SystemMode {
