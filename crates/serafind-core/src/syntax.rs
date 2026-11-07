@@ -12,6 +12,10 @@
 //! | `d:` / `f:` | Folders / Files mode; a value is a name word |
 //! | `type:folder` / `type:file` | Same as `d:` / `f:`; `-type:file` means folders and the reverse |
 //! | `content:` `c:` / `-c:` | Content mode: text the file must contain / must not contain |
+//! | `re:` / `-re:` | Content mode: regular expression the file must match / must not match |
+//!
+//! In the Content mode, the words of the line are the text to find inside the files too: the
+//! search reads them as one phrase (see [`Query::content_texts`]).
 //!
 //! Several mode filters: the last one wins, the earlier ones are reported as replaced (two content
 //! filters are the same mode and both apply). A mode filter wins over the tab chosen in the bar.
@@ -51,6 +55,10 @@ pub struct Query {
     pub content: Vec<String>,
     /// Texts the file must not contain (Content mode).
     pub excluded_content: Vec<String>,
+    /// Regular expressions the file must match (Content mode, `re:`).
+    pub content_patterns: Vec<String>,
+    /// Regular expressions the file must not match.
+    pub excluded_content_patterns: Vec<String>,
     /// The mode asked by a filter; `None` keeps the tab chosen in the bar.
     pub mode: Option<SearchMode>,
     /// The `in:` folder, as a full path; `None` keeps the default roots.
@@ -70,6 +78,20 @@ impl Query {
         self.parts.iter().any(|part| part.error.is_some())
     }
 
+    /// The texts to find inside the files in the Content mode: the words of the line as one
+    /// phrase, then each `c:` text. Excluded words join the excluded texts.
+    #[must_use]
+    pub fn content_texts(&self) -> (Vec<String>, Vec<String>) {
+        let mut wanted = Vec::new();
+        if !self.words.is_empty() {
+            wanted.push(self.words.join(" "));
+        }
+        wanted.extend(self.content.iter().cloned());
+        let mut unwanted = self.excluded_words.clone();
+        unwanted.extend(self.excluded_content.iter().cloned());
+        (wanted, unwanted)
+    }
+
     /// True when the line asks for nothing (empty, only mode filters, or only ignored parts).
     #[must_use]
     pub fn is_empty(&self) -> bool {
@@ -79,6 +101,8 @@ impl Query {
             && self.excluded_extensions.is_empty()
             && self.content.is_empty()
             && self.excluded_content.is_empty()
+            && self.content_patterns.is_empty()
+            && self.excluded_content_patterns.is_empty()
             && self.start_folder.is_none()
     }
 }
@@ -176,7 +200,7 @@ impl fmt::Display for PartError {
 }
 
 /// The filters, as typed before the colon.
-pub const FILTER_KEYS: [&str; 9] = ["ext", "in", "app", "a", "d", "f", "type", "content", "c"];
+pub const FILTER_KEYS: [&str; 10] = ["ext", "in", "app", "a", "d", "f", "type", "content", "c", "re"];
 
 /// Reads a search line.
 #[must_use]
@@ -200,7 +224,14 @@ pub fn parse(line: &str, context: &ParseContext<'_>) -> Query {
             PartKind::Folder => query.start_folder = Some(resolve_folder(&raw_value(part), context)),
             PartKind::Mode(mode) => {
                 query.mode = Some(mode);
-                if mode == SearchMode::Content {
+                if mode == SearchMode::Content && is_filter(part, "re:") {
+                    push(
+                        &mut query.content_patterns,
+                        &mut query.excluded_content_patterns,
+                        part.excluded,
+                        value,
+                    );
+                } else if mode == SearchMode::Content {
                     push(
                         &mut query.content,
                         &mut query.excluded_content,
@@ -350,7 +381,7 @@ fn understand(token: Token<'_>, context: &ParseContext<'_>) -> Part {
             }
             return part;
         }
-        "content" | "c" => {
+        "content" | "c" | "re" => {
             part.kind = mode(SearchMode::Content);
             if part.value.is_empty() {
                 part.error = Some(PartError::MissingContent);
@@ -407,10 +438,15 @@ fn resolve_last_wins(parts: &mut [Part]) {
 }
 
 fn is_type_filter(part: &Part) -> bool {
+    is_filter(part, "type:")
+}
+
+/// The part was typed as the filter `key` (`type:`, `re:`), excluded or not.
+fn is_filter(part: &Part, key: &str) -> bool {
     part.text
         .trim_start_matches('-')
         .to_ascii_lowercase()
-        .starts_with("type:")
+        .starts_with(key)
 }
 
 /// The value typed after the colon of a filter, quotes removed.

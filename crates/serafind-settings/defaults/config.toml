@@ -79,6 +79,17 @@ learn_from_usage = false
 # {dir} is replaced by the folder, e.g. "kitty --directory {dir}"; without {dir} the terminal
 # starts in the folder.
 terminal = "auto"
+# Content mode: how Enter opens a file at the line found. "auto" uses the default application
+# of the file when it is an editor that can go to a line (VS Code, Zed, Sublime Text, Kate, gedit,
+# vim, Neovim, Emacs, JetBrains IDEs...), else opens the file as usual. Otherwise a command, where
+# {file} and {line} are replaced, e.g. "code -g {file}:{line}".
+open_at_line = "auto"
+
+[content]
+# Content mode: search inside text files. Files larger than this, in megabytes, are not read.
+max_file_size = 10
+# The search starts after this pause in typing, in milliseconds.
+typing_delay = 250
 
 [keys]
 # Keys of the bar: modifiers (Ctrl, Alt, Shift) and a key, joined with "+". Keys: a letter, a digit,

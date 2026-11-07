@@ -332,6 +332,33 @@ impl Index {
     }
 
     /// Scans the table in slices, one thread per slice, and puts the best matches together.
+    /// The files the Content mode reads for `query`: those under its `in:` folder, with its
+    /// extensions, shallow ones first. `None` when the `in:` folder is not in the index.
+    #[must_use]
+    pub fn content_candidates(&self, query: &Query) -> Option<Vec<PathBuf>> {
+        let start = match &query.start_folder {
+            Some(folder) => Some(self.find(folder)?),
+            None => None,
+        };
+        // Only the file filters count: the words are the text to find inside.
+        let filters = Query {
+            extensions: query.extensions.clone(),
+            excluded_extensions: query.excluded_extensions.clone(),
+            ..Query::default()
+        };
+        let mut matcher = Matcher::new(&filters, SearchMode::Files);
+        let mut files: Vec<(u16, EntryId)> = self
+            .entries
+            .iter()
+            .zip(0..)
+            .filter_map(|(entry, id)| self.candidate(entry, id, start))
+            .filter(|candidate| matcher.strict(candidate).is_some())
+            .map(|candidate| (candidate.depth, candidate.id))
+            .collect();
+        files.sort_unstable();
+        Some(files.into_iter().map(|(_, id)| self.path_of(id)).collect())
+    }
+
     fn scan_in_parallel(
         &self,
         query: &Query,
