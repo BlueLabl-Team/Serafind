@@ -17,6 +17,8 @@ serafind-index = { path = "crates/serafind-index" }
 nucleo-matcher = "0.3"
 ignore = "0.4"
 hashbrown = "0.17"
+notify = "8.2"
+notify-debouncer-full = "0.7"
 
 # Tests
 rstest = "0.28"

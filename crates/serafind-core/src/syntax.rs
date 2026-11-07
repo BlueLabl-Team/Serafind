@@ -38,7 +38,8 @@ pub struct ParseContext<'a> {
 pub struct Query {
     /// Every part of the line, in order, as typed.
     pub parts: Vec<Part>,
-    /// Words (or phrases) the name must contain; `*` and `?` make a pattern.
+    /// Words (or phrases) the name must contain; `*` and `?` make a pattern, `^` and `$` anchor it
+    /// at the start and the end of the name.
     pub words: Vec<String>,
     /// Words the name must not contain.
     pub excluded_words: Vec<String>,

@@ -265,6 +265,25 @@ impl Index {
             .map(|(id, _)| id)
     }
 
+    /// Every live entry under `folder` (at any depth), `folder` itself excluded.
+    pub fn ids_under(&self, folder: EntryId) -> impl Iterator<Item = EntryId> + '_ {
+        self.ids().filter(move |&id| self.is_strictly_under(id, folder))
+    }
+
+    /// Removes everything under the folder at `path`, keeping the folder. Returns how many entries
+    /// were removed.
+    pub fn clear_under(&mut self, path: &Path) -> usize {
+        let Some(folder) = self.find(path) else {
+            return 0;
+        };
+        let children: Vec<EntryId> = (0..)
+            .zip(&self.entries)
+            .filter(|(_, entry)| entry.parent == folder && entry.state != State::Removed)
+            .map(|(id, _)| id)
+            .collect();
+        children.into_iter().map(|child| self.remove(child)).sum()
+    }
+
     /// The kind of a live entry; `None` for roots and removed entries.
     #[must_use]
     pub fn kind(&self, id: EntryId) -> Option<Kind> {

@@ -1,7 +1,8 @@
 //! Which entries a query keeps, and in which order.
 //!
 //! Strict matching first (as in PowerHive): every word must be contained in the name (a word with
-//! `*` or `?` is a pattern for the whole name), no excluded word may be, the extension must be one
+//! `*` or `?` is a pattern found anywhere in the name; `^` anchors it at the start of the name and
+//! `$` at the end), no excluded word may be, the extension must be one
 //! of `ext:`, and the kind must fit the mode. When no entry matches strictly, the words are matched
 //! fuzzily instead (`fctr` finds `facture`); the other criteria still apply.
 //!
@@ -115,7 +116,14 @@ impl Matcher {
         let fuzzy_atoms = query
             .words
             .iter()
-            .map(|word| word.replace(['*', '?'], ""))
+            .map(|word| {
+                let word = if is_pattern(word) {
+                    word.trim_start_matches('^').trim_end_matches('$')
+                } else {
+                    word
+                };
+                word.replace(['*', '?'], "")
+            })
             .filter(|word| !word.is_empty())
             .map(|word| {
                 let needle = Needle::new(&word);
@@ -411,7 +419,7 @@ fn is_word_start(previous: Option<char>, current: char) -> bool {
 
 impl Word {
     fn new(word: &str) -> Self {
-        if word.contains(['*', '?']) {
+        if is_pattern(word) {
             Self::Pattern(Glob::new(word))
         } else {
             Self::Text(Needle::new(word))
@@ -432,13 +440,28 @@ struct Glob {
     case: CaseMatching,
 }
 
+/// True when a word is a pattern: it has `*` or `?`, starts with `^` or ends with `$`.
+fn is_pattern(word: &str) -> bool {
+    word.contains(['*', '?']) || (word.len() > 1 && (word.starts_with('^') || word.ends_with('$')))
+}
+
 impl Glob {
+    /// A pattern found anywhere in the name; `^` anchors it at the start, `$` at the end.
     fn new(pattern: &str) -> Self {
         let case = CaseMatching::smart(pattern);
-        Self {
-            pattern: text::fold(pattern, case).chars().collect(),
-            case,
+        let (anchored_start, rest) = pattern
+            .strip_prefix('^')
+            .map_or((false, pattern), |rest| (true, rest));
+        let (anchored_end, body) = rest.strip_suffix('$').map_or((false, rest), |body| (true, body));
+        let mut chars = Vec::with_capacity(body.len() + 2);
+        if !anchored_start {
+            chars.push('*');
         }
+        chars.extend(text::fold(body, case).chars());
+        if !anchored_end {
+            chars.push('*');
+        }
+        Self { pattern: chars, case }
     }
 
     /// Folds `name`, then matches it (for tests).
