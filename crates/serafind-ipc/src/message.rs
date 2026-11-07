@@ -62,6 +62,8 @@ pub enum Action {
     Reveal,
     /// Open a terminal in the folder (the folder of a file).
     Terminal,
+    /// Start an application; the path is the id of [`Row::app`].
+    Launch,
 }
 
 /// The answer to a [`Request`].
@@ -173,6 +175,13 @@ pub struct Row {
     pub kind: Kind,
     /// Characters of the name to highlight.
     pub highlights: Vec<u32>,
+    /// For an application: its id, to start it with [`Action::Launch`]. `path` is then its
+    /// program.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app: Option<String>,
+    /// For an application: its icon file (PNG or SVG).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
 }
 
 /// Answer to a search.
@@ -225,6 +234,8 @@ mod tests {
                 location: "~".into(),
                 kind: Kind::File,
                 highlights: vec![0, 1],
+                app: None,
+                icon: None,
             }],
             total: 1,
             ..Results::default()
