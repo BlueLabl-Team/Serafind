@@ -52,12 +52,35 @@ invoice ext:pdf,docx in:~/Documents type:file -draft "exact phrase" rep*rt
 - **Content** search runs on demand, like ripgrep: the index narrows down the candidate files, then they are read in parallel.
 - The **global shortcut** is registered directly on Windows and X11, and through the XDG `GlobalShortcuts` portal on Wayland (GNOME, KDE). On other compositors, bind `serafind toggle` to a shortcut in the compositor settings.
 
+## Settings and themes
+
+Everything is set in one folder: `~/.config/serafind/` on Linux, `%APPDATA%\Serafind\` on Windows. It is created on first launch, with every option commented:
+
+```
+serafind/
+├── config.toml        behavior, layout, results, indexed folders, shortcut, theme choice
+└── themes/
+    ├── dark.toml      built-in themes, written as examples
+    ├── light.toml
+    └── my-theme.toml  your own: extends = "dark", then only what changes
+```
+
+- Changes apply as soon as a file is saved.
+- Every key is optional: a missing key keeps its default.
+- An unknown key, a wrong value or a syntax error makes the file be refused. The previous settings stay, and the error is shown in the bar with its file and line.
+- `theme = "system"` follows the dark or light mode of the desktop. Font and icons come from the theme, and `[appearance]` in `config.toml` can override them.
+- The global shortcut is `Super+F` by default (`[shortcut] toggle`), with an optional per-system value.
+
 ## Built with
 
 | | |
 |---|---|
 | [Rust](https://www.rust-lang.org/) (edition 2024, latest stable) | Language |
 | [egui](https://github.com/emilk/egui) | User interface |
+| [ignore](https://github.com/BurntSushi/ripgrep/tree/master/crates/ignore) | Parallel tree walking |
+| [notify](https://github.com/notify-rs/notify) | Filesystem watching (index, settings) |
+| [nucleo-matcher](https://github.com/helix-editor/nucleo) | Fuzzy matching, accent and case folding |
+| [serde](https://serde.rs/) and [toml](https://github.com/toml-rs/toml) | Settings and theme files |
 
 ### Tests
 
@@ -77,6 +100,7 @@ Later: [egui_kittest](https://github.com/emilk/egui/tree/main/crates/egui_kittes
 |---|---|
 | [`crates/serafind-core`](crates/serafind-core) | Search line syntax, modes, matching and ranking. Pure: no disk, no window. |
 | [`crates/serafind-index`](crates/serafind-index) | In-memory index: tree walking, filesystem watching, exclusions. |
+| [`crates/serafind-settings`](crates/serafind-settings) | `config.toml` and themes: defaults, validation, live reload. No user interface. |
 | [`crates/serafind`](crates/serafind) | The `serafind` executable: search bar, resident process, global shortcut, command line. |
 
 ## Build from source
@@ -98,12 +122,13 @@ cargo insta review             # review changed snapshots
 | 0 | Workspace, test tooling, roadmap | ✅ |
 | 1 | `core`: search syntax (PowerHive grammar + mode keywords), matching, ranking (fuzzy / prefix) | ✅ |
 | 2 | `index`: parallel first walk, filesystem watching, exclusions, benchmarks | ✅ |
+| 3 | Settings and themes (TOML, defaults, validation, live reload) | ✅ |
 | 3 | Search bar (egui): input, chips, results, keyboard navigation, `in:` completion | ⬜ |
 | 4 | Resident process: single instance, `serafind toggle`, global shortcut (X11, Windows, Wayland portal), tray icon | ⬜ |
 | 5 | Actions: open, show in the file manager, copy the path | ⬜ |
 | 6 | Apps mode: `.desktop` files (Linux), Start menu shortcuts (Windows) | ⬜ |
 | 7 | Content mode: on-demand parallel search | ⬜ |
-| 8 | TOML settings (shortcut, indexed and excluded folders, theme), start with the session | ⬜ |
+| 8 | Start with the session; settings for indexed and excluded folders applied live | ⬜ |
 | 9 | GitHub Actions: build, tests, releases (Linux and Windows executables) | ⬜ |
 | 10 | Integration in third-party software through their plugin / extension systems (library, IPC protocol or C ABI: to be decided) | ⬜ |
 
