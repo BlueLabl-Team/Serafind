@@ -17,11 +17,11 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 pub use config::{
-    Appearance, Behavior, Chips, Config, Escape, IconSet, IndexSettings, Layout, ModeSelector, Results, Rows,
-    Screen, Shortcut, Window,
+    Appearance, Backend, BarSettings, Behavior, Chips, Config, Escape, IconSet, IndexSettings, Layout,
+    ModeSelector, Rows, Screen, Shortcut, Window,
 };
 pub use error::SettingsError;
-pub use theme::{BUILT_IN, Color, Colors, Font, IconColors, Icons, Shape, Theme};
+pub use theme::{BUILT_IN, Color, Colors, Font, IconColors, Icons, Shape, Theme, ThemeMode};
 pub use watch::SettingsWatcher;
 
 /// The commented `config.toml` written on first launch.
@@ -133,9 +133,6 @@ fn apply_overrides(config: &Config, theme: &mut Theme) {
     let appearance = &config.appearance;
     if let Some(family) = &appearance.font_family {
         theme.font.family.clone_from(family);
-    }
-    if let Some(size) = appearance.font_size {
-        theme.font.size = size;
     }
     if let Some(icons) = appearance.icons {
         theme.icons.set = icons;

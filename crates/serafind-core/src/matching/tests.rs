@@ -247,6 +247,19 @@ fn fuzzy_ranks_closer_matches_first() {
     assert_eq!(names(&ranked), ["facture.txt", "fxaxcxtxuxrxe.txt"]);
 }
 
+// --- Highlights ---
+
+#[rstest]
+#[case("fact", "facture.pdf", false, &[0, 1, 2, 3])]
+#[case("ture 2026", "facture-2026.pdf", false, &[3, 4, 5, 6, 8, 9, 10, 11])]
+#[case("ete", "L'Été.txt", false, &[2, 3, 4])]
+#[case("rep*rt", "report", false, &[])]
+#[case("fctr", "facture", true, &[0, 2, 3, 5])]
+fn highlights(#[case] line: &str, #[case] name: &str, #[case] fuzzy: bool, #[case] expected: &[usize]) {
+    let mut matcher = matcher(line, SearchMode::All);
+    assert_eq!(matcher.highlights(&file(name), fuzzy), expected);
+}
+
 // --- Wildcards ---
 
 #[rstest]

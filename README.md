@@ -58,9 +58,9 @@ Everything is set in one folder: `~/.config/serafind/` on Linux, `%APPDATA%\Sera
 
 ```
 serafind/
-├── config.toml        behavior, layout, results, indexed folders, shortcut, theme choice
+├── config.toml        bar size and text size, layout, behavior, indexed folders, shortcut, theme choice
 └── themes/
-    ├── dark.toml      built-in themes, written as examples
+    ├── dark.toml      built-in themes (PowerHive's Default Dark and Default Light), written as examples
     ├── light.toml
     └── my-theme.toml  your own: extends = "dark", then only what changes
 ```
@@ -68,6 +68,8 @@ serafind/
 - Changes apply as soon as a file is saved.
 - Every key is optional: a missing key keeps its default.
 - An unknown key, a wrong value or a syntax error makes the file be refused. The previous settings stay, and the error is shown in the bar with its file and line.
+- Every dimension of the bar (width, padding, row height, text size, number of results) is in `[bar]` of `config.toml`; themes only hold the look (colors, font, corners, shadow, icons).
+- Themes use the same color roles as PowerHive (`primary`, `accent`, `surface_elevated`, `text_secondary`…), so both applications look alike.
 - `theme = "system"` follows the dark or light mode of the desktop. Font and icons come from the theme, and `[appearance]` in `config.toml` can override them.
 - The global shortcut is `Super+F` by default (`[shortcut] toggle`), with an optional per-system value.
 
@@ -110,7 +112,8 @@ You need Rust (latest stable) and Git.
 ```bash
 git clone git@github.com:BlueLabl-Team/Serafind.git
 cd Serafind
-cargo build --release          # target/release/serafind
+cargo run --release -p serafind  # opens the bar (the global shortcut comes later)
+cargo build --profile dist       # smallest executable, for publishing: target/dist/serafind
 cargo test --workspace         # or: cargo nextest run --workspace
 cargo insta review             # review changed snapshots
 ```
@@ -123,8 +126,9 @@ cargo insta review             # review changed snapshots
 | 1 | `core`: search syntax (PowerHive grammar + mode keywords), matching, ranking (fuzzy / prefix) | ✅ |
 | 2 | `index`: parallel first walk, filesystem watching, exclusions, benchmarks | ✅ |
 | 3 | Settings and themes (TOML, defaults, validation, live reload) | ✅ |
-| 3 | Search bar (egui): input, chips, results, keyboard navigation, `in:` completion | ⬜ |
+| 3 | Search bar (egui): input, chips, results, keyboard navigation, `in:` completion | ✅ |
 | 4 | Resident process: single instance, `serafind toggle`, global shortcut (X11, Windows, Wayland portal), tray icon | ⬜ |
+| 4b | Choose where the bar appears on Wayland (layer-shell, focus on X11, or another way: to be decided) | ⬜ |
 | 5 | Actions: open, show in the file manager, copy the path | ⬜ |
 | 6 | Apps mode: `.desktop` files (Linux), Start menu shortcuts (Windows) | ⬜ |
 | 7 | Content mode: on-demand parallel search | ⬜ |
