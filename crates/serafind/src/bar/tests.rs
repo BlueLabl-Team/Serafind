@@ -38,7 +38,7 @@ fn index_of(paths: &[&str]) -> SharedIndex {
 }
 
 fn bar_with(settings: Settings, index: SharedIndex, home: &Path) -> Bar {
-    Bar::new(settings, Searcher::new(index, home.to_path_buf()))
+    Bar::new(settings, Searcher::local(index, home.to_path_buf()))
 }
 
 fn harness(bar: Bar) -> Harness<'static, Bar> {
@@ -301,7 +301,8 @@ fn preview() {
     }
 }
 
-/// Renders the bar inside the same frame as the window (shadow margin), at the window width.
+/// Renders the bar inside the same frame as the window (shadow margin), at the window width,
+/// for the default size and a larger one.
 #[test]
 #[ignore = "writes images for a visual check"]
 fn preview_window() {
@@ -309,30 +310,46 @@ fn preview_window() {
         return;
     };
     let folder = PathBuf::from(folder);
-    for (name, line) in [("window-empty", ""), ("window-results", "fact")] {
-        let bar = bar_with(Settings::defaults(SystemMode::Dark), index_of(&FILES), Path::new(HOME));
-        let settings = bar.settings().clone();
-        let width = f32::from(settings.config.bar.width) + 2.0 * f32::from(crate::app::SHADOW_MARGIN);
-        let mut harness = Harness::builder()
-            .with_size(egui::vec2(width, 320.0))
-            .with_context_setup(move |ctx| {
-                let _ = apply_theme(ctx, &settings);
-            })
-            .build_ui_state(
-                |ui, bar: &mut Bar| {
-                    let rect = egui::Frame::new()
-                        .inner_margin(egui::Margin::same(crate::app::SHADOW_MARGIN))
-                        .show(ui, |ui| bar.ui(ui))
-                        .response
-                        .rect;
-                    eprintln!("outer frame rect: {rect:?} (window width {})", ui.ctx().content_rect().width());
-                },
-                bar,
-            );
-        harness.run();
-        if !line.is_empty() {
-            type_text(&mut harness, line);
+    for (width, padding, row_height) in [(680, 10, 34), (760, 12, 38)] {
+        for (name, line) in [("empty", ""), ("results", "fact")] {
+            let mut settings = Settings::defaults(SystemMode::Dark);
+            settings.config.bar.width = width;
+            settings.config.bar.padding = padding;
+            settings.config.bar.row_height = row_height;
+            let bar = bar_with(settings.clone(), index_of(&FILES), Path::new(HOME));
+            let window = f32::from(width) + 2.0 * f32::from(crate::app::SHADOW_MARGIN);
+            // The harness puts 8 points around the ui: add them so the ui is as wide as the window.
+            let mut harness = Harness::builder()
+                .with_size(egui::vec2(window + 16.0, 340.0))
+                .with_context_setup(move |ctx| {
+                    let _ = apply_theme(ctx, &settings);
+                })
+                .build_ui_state(
+                    move |ui, bar: &mut Bar| {
+                        let available = ui.available_rect_before_wrap();
+                        let rect = egui::Frame::new()
+                            .inner_margin(egui::Margin::same(crate::app::SHADOW_MARGIN))
+                            .show(ui, |ui| bar.ui(ui))
+                            .response
+                            .rect;
+                        eprintln!(
+                            "{width}: window {window}, ui {:.1}..{:.1}, frame {:.1}..{:.1}",
+                            available.left(),
+                            available.right(),
+                            rect.left(),
+                            rect.right()
+                        );
+                    },
+                    bar,
+                );
+            harness.run();
+            if !line.is_empty() {
+                type_text(&mut harness, line);
+            }
+            let image = harness.render().expect("render");
+            image
+                .save(folder.join(format!("window-{width}-{name}.png")))
+                .expect("save");
         }
-        harness.render().expect("render").save(folder.join(format!("{name}.png"))).expect("save");
     }
 }

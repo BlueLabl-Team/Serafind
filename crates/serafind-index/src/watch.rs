@@ -40,6 +40,8 @@ pub struct LiveIndex {
 /// How the watching goes, for diagnostics.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WatchStatus {
+    /// True once every folder is watched: changes are followed from then on.
+    pub ready: bool,
     /// Folders currently watched (one per root on systems with recursive watching).
     pub watched: usize,
     /// Folders that could not be watched (inotify limit reached, permissions...).
@@ -59,7 +61,8 @@ struct Shared {
 }
 
 impl LiveIndex {
-    /// Walks `roots`, then watches them. Events are grouped for `delay` before being applied.
+    /// Walks `roots`, then watches them in the background ([`WatchStatus::ready`] tells when it is
+    /// done). Events are grouped for `delay` before being applied.
     ///
     /// # Errors
     /// When the system watcher cannot be created.
@@ -81,12 +84,19 @@ impl LiveIndex {
             status: Arc::clone(&status),
             debouncer,
         };
-        shared.watch_all();
-
         let (stop, stopped) = mpsc::channel();
         let worker = std::thread::Builder::new()
             .name("serafind-index watcher".to_owned())
-            .spawn(move || run(&mut shared, &events, &stopped))
+            .spawn(move || {
+                // The index can already be searched while the watches are set up (one per
+                // folder on Linux: about a second for a large home folder).
+                shared.watch_all();
+                shared.catch_up();
+                if let Ok(mut status) = shared.status.lock() {
+                    status.ready = true;
+                }
+                run(&mut shared, &events, &stopped);
+            })
             .map_err(|error| notify::Error::generic(&error.to_string()))?;
         Ok(Self {
             index,
@@ -161,6 +171,16 @@ impl Shared {
             self.roots.clone()
         };
         self.watch(&folders);
+    }
+
+    /// Walks the roots again once they are watched: whatever appeared while the watches were
+    /// being set up is added.
+    fn catch_up(&mut self) {
+        let shared_index = Arc::clone(&self.index);
+        let mut index = shared_index.write().expect("index lock");
+        for root in self.roots.clone() {
+            add_subtree(&mut index, &root, &self.exclusions);
+        }
     }
 
     fn watch(&mut self, folders: &[PathBuf]) {
