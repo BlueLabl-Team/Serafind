@@ -1,29 +1,115 @@
-//! The window around the bar: placement, size, focus, settings reload and the index in the
-//! background.
+//! The bar process: the bar in a borderless window, linked to the resident process.
+//!
+//! The resident process tells it to show, hide or quit. When the bar closes (Escape, focus lost),
+//! the window is hidden and kept for next time when the platform allows it and `keep_window` is
+//! set; otherwise (always on Wayland, where windows cannot be hidden) the process ends, and the
+//! resident process starts a new one next time.
 
+use std::collections::VecDeque;
+use std::io;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use eframe::egui::{self, ViewportCommand};
-use serafind_index::{Exclusions, LiveIndex};
-use serafind_settings::{IndexSettings, Settings, SettingsWatcher, SystemMode};
+use serafind_ipc::{Client, Event, Response, Stream};
+use serafind_settings::{Settings, SettingsWatcher, SystemMode};
+use serde::Deserialize;
 
 use crate::bar::{self, Bar, Request};
-use crate::search::{Searcher, SharedIndex};
+use crate::search::Searcher;
 
 /// Transparent room around the bar for its shadow.
 pub const SHADOW_MARGIN: i8 = 14;
 
+/// The bar's link to the resident process: the events it pushes, and a way to tell it whether
+/// the bar is shown.
+pub struct Link {
+    events: Arc<Mutex<VecDeque<Event>>>,
+    writer: Arc<Mutex<Stream>>,
+}
+
+/// What arrives on the subscribed connection: events, and the answers to our notifications.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum Incoming {
+    Event(Event),
+    Response(
+        #[cfg_attr(
+            not(test),
+            expect(dead_code, reason = "answers to notifications are not needed")
+        )]
+        Response,
+    ),
+}
+
+impl Link {
+    /// Subscribes to the resident process's events; `ctx` is woken up when one arrives.
+    ///
+    /// # Errors
+    /// When the resident process cannot be reached.
+    pub fn subscribe(ctx: &egui::Context) -> io::Result<Self> {
+        let mut client = Client::connect()?;
+        match client.call(&serafind_ipc::Request::Subscribe)? {
+            Response::Ok => {}
+            other => return Err(io::Error::other(format!("unexpected answer: {other:?}"))),
+        }
+        let (mut reader, writer) = client.into_connection().into_parts();
+        let events = Arc::new(Mutex::new(VecDeque::new()));
+        let queue = Arc::clone(&events);
+        let ctx = ctx.clone();
+        std::thread::Builder::new()
+            .name("serafind-bar events".to_owned())
+            .spawn(move || {
+                loop {
+                    let event = match serafind_ipc::read_message::<Incoming>(&mut reader) {
+                        Ok(Some(Incoming::Event(event))) => event,
+                        Ok(Some(Incoming::Response(_))) => continue,
+                        // The resident process is gone: the bar has nothing to search any more.
+                        Ok(None) | Err(_) => Event::Quit,
+                    };
+                    let quit = event == Event::Quit;
+                    if let Ok(mut queue) = queue.lock() {
+                        queue.push_back(event);
+                    }
+                    ctx.request_repaint();
+                    if quit {
+                        break;
+                    }
+                }
+            })?;
+        Ok(Self {
+            events,
+            writer: Arc::new(Mutex::new(writer)),
+        })
+    }
+
+    fn take_events(&self) -> Vec<Event> {
+        self.events
+            .lock()
+            .map(|mut queue| queue.drain(..).collect())
+            .unwrap_or_default()
+    }
+
+    fn tell_visible(&self, visible: bool) {
+        if let Ok(mut writer) = self.writer.lock() {
+            let _ = serafind_ipc::write_message(&mut *writer, &serafind_ipc::Request::BarVisible { visible });
+        }
+    }
+}
+
 /// The application: the bar in a borderless window.
+#[expect(clippy::struct_excessive_bools, reason = "independent states of the window")]
 pub struct App {
     bar: Bar,
     settings_dir: Option<PathBuf>,
     settings_changed: Arc<AtomicBool>,
     _settings_watcher: Option<SettingsWatcher>,
-    /// Keeps the watcher of the index alive.
-    _live_index: Arc<Mutex<Option<LiveIndex>>>,
+    link: Option<Link>,
+    /// The window may be hidden and kept between openings (not on Wayland).
+    can_hide: bool,
+    hidden: bool,
     mode: SystemMode,
     font_family: String,
     settings_error: Option<String>,
@@ -35,20 +121,18 @@ pub struct App {
 }
 
 impl App {
-    /// Builds the app: applies the theme, starts the index in the background and watches the
-    /// settings folder.
+    /// Builds the app: applies the theme and watches the settings folder. `can_hide` says
+    /// whether the window may be hidden and kept between openings.
     #[must_use]
     pub fn new(
         ctx: &egui::Context,
         settings: Settings,
         settings_error: Option<String>,
         settings_dir: Option<PathBuf>,
-        home: PathBuf,
+        searcher: Searcher,
+        link: Option<Link>,
+        can_hide: bool,
     ) -> Self {
-        let shared: SharedIndex = Arc::new(RwLock::new(None));
-        let live_index = Arc::new(Mutex::new(None));
-        start_index(ctx, &settings.config.index, &home, &shared, &live_index);
-
         let settings_changed = Arc::new(AtomicBool::new(false));
         let watcher = settings_dir.as_ref().and_then(|dir| {
             let changed = Arc::clone(&settings_changed);
@@ -64,11 +148,13 @@ impl App {
         let font_family = settings.theme.font.family.clone();
         let mode = system_mode(ctx);
         let mut app = Self {
-            bar: Bar::new(settings, Searcher::new(shared, home)),
+            bar: Bar::new(settings, searcher),
             settings_dir,
             settings_changed,
             _settings_watcher: watcher,
-            _live_index: live_index,
+            link,
+            can_hide,
+            hidden: false,
             mode,
             font_family,
             settings_error,
@@ -91,7 +177,7 @@ impl App {
                 let previous = self.bar.settings().clone();
                 if settings.theme != previous.theme || settings.config.bar != previous.config.bar {
                     if settings.theme.font.family == self.font_family {
-                        style_only(ctx, &settings);
+                        crate::style::apply(ctx, &settings);
                     } else {
                         // Loading fonts again is slower: only when the family changes.
                         self.font_warning = bar::apply_theme(ctx, &settings);
@@ -125,25 +211,62 @@ impl App {
         self.bar.set_problems(problems);
     }
 
-    /// Puts the window at its place on the screen (once the screen size is known).
+    /// Puts the window at its place on the screen (once the screen size is known), shows it and
+    /// asks for the focus.
     fn place(&mut self, ctx: &egui::Context) {
         let monitor = ctx.input(|input| input.viewport().monitor_size);
         let Some(monitor) = monitor else {
             return;
         };
-        let window = &self.bar.settings().config.window;
-        let width = f32::from(self.bar.settings().config.bar.width) + 2.0 * f32::from(SHADOW_MARGIN);
+        let settings = &self.bar.settings().config;
+        let width = f32::from(settings.bar.width) + 2.0 * f32::from(SHADOW_MARGIN);
         let x = ((monitor.x - width) / 2.0).max(0.0);
-        let y = monitor.y * window.top;
+        let y = monitor.y * settings.window.top;
         ctx.send_viewport_cmd(ViewportCommand::OuterPosition(egui::pos2(x, y)));
         ctx.send_viewport_cmd(ViewportCommand::Visible(true));
         ctx.send_viewport_cmd(ViewportCommand::Focus);
         self.placed = true;
     }
+
+    /// Hides the window for next time, or ends the bar process when it cannot be hidden.
+    fn close_bar(&mut self, ctx: &egui::Context) {
+        if let Some(link) = &self.link {
+            link.tell_visible(false);
+        }
+        if self.can_hide && self.bar.settings().config.behavior.keep_window {
+            self.hidden = true;
+            self.was_focused = false;
+            self.bar.reset_for_opening();
+            ctx.send_viewport_cmd(ViewportCommand::Visible(false));
+        } else {
+            ctx.send_viewport_cmd(ViewportCommand::Close);
+        }
+    }
+
+    /// Shows the kept window again.
+    fn show_again(&mut self, ctx: &egui::Context) {
+        if !self.hidden {
+            ctx.send_viewport_cmd(ViewportCommand::Focus);
+            return;
+        }
+        self.hidden = false;
+        if let Some(link) = &self.link {
+            link.tell_visible(true);
+        }
+        self.place(ctx);
+    }
 }
 
 impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let events = self.link.as_ref().map(Link::take_events).unwrap_or_default();
+        for event in events {
+            match event {
+                Event::Show { .. } => self.show_again(ctx),
+                Event::Hide => self.close_bar(ctx),
+                Event::Quit => ctx.send_viewport_cmd(ViewportCommand::Close),
+            }
+        }
         if self.settings_changed.swap(false, Ordering::AcqRel) {
             self.reload_settings(ctx);
         }
@@ -152,6 +275,9 @@ impl eframe::App for App {
             self.mode = mode;
             self.reload_settings(ctx);
         }
+        if self.hidden {
+            return;
+        }
         let focused = ctx.input(|input| input.viewport().focused);
         if focused == Some(true) {
             self.was_focused = true;
@@ -159,7 +285,7 @@ impl eframe::App for App {
             && self.was_focused
             && self.bar.settings().config.behavior.hide_on_focus_loss
         {
-            ctx.send_viewport_cmd(ViewportCommand::Close);
+            self.close_bar(ctx);
         }
     }
 
@@ -190,7 +316,7 @@ impl eframe::App for App {
 
         for request in self.bar.take_requests() {
             match request {
-                Request::Close => ctx.send_viewport_cmd(ViewportCommand::Close),
+                Request::Close => self.close_bar(&ctx),
                 // Opening and showing in the folder come with step 5 of the roadmap.
                 Request::Open(_) | Request::Reveal(_) => {
                     self.bar.notify(crate::strings::Strings::ENGLISH.action_not_ready);
@@ -255,70 +381,10 @@ fn paint_shadow(ui: &egui::Ui, theme: &serafind_settings::Theme) {
         .add(shadow.as_shape(rect, egui::CornerRadius::same(radius)));
 }
 
-fn style_only(ctx: &egui::Context, settings: &Settings) {
-    crate::style::apply(ctx, settings);
-}
-
 fn system_mode(ctx: &egui::Context) -> SystemMode {
     match ctx.system_theme() {
         Some(egui::Theme::Light) => SystemMode::Light,
         _ => SystemMode::Dark,
-    }
-}
-
-/// Builds the index in a background thread, then keeps it up to date; the bar shows
-/// "Indexing…" until it is ready.
-fn start_index(
-    ctx: &egui::Context,
-    settings: &IndexSettings,
-    home: &std::path::Path,
-    shared: &SharedIndex,
-    live_index: &Arc<Mutex<Option<LiveIndex>>>,
-) {
-    let roots: Vec<PathBuf> = settings
-        .roots
-        .iter()
-        .map(|root| expand_home(root, home))
-        .collect();
-    let mut exclusions = Exclusions::defaults(home);
-    exclusions.names.clone_from(&settings.exclude_names);
-    if !settings.exclude_paths.is_empty() {
-        exclusions.paths = settings
-            .exclude_paths
-            .iter()
-            .map(|path| expand_home(path, home))
-            .collect();
-    }
-    exclusions.hidden_folders = !settings.hidden_folders;
-
-    let ctx = ctx.clone();
-    let shared = Arc::clone(shared);
-    let live_index = Arc::clone(live_index);
-    std::thread::Builder::new()
-        .name("serafind-index start".to_owned())
-        .spawn(move || {
-            if let Ok(live) = LiveIndex::start(roots, exclusions, serafind_index::DEFAULT_DELAY) {
-                if let Ok(mut slot) = shared.write() {
-                    *slot = Some(Arc::clone(live.index()));
-                }
-                if let Ok(mut slot) = live_index.lock() {
-                    *slot = Some(live);
-                }
-                ctx.request_repaint();
-            }
-        })
-        .expect("a thread can be started");
-}
-
-/// `~` and `~/x` from the home folder.
-#[must_use]
-pub fn expand_home(path: &str, home: &std::path::Path) -> PathBuf {
-    if path == "~" {
-        home.to_path_buf()
-    } else if let Some(rest) = path.strip_prefix("~/").or_else(|| path.strip_prefix("~\\")) {
-        home.join(rest)
-    } else {
-        PathBuf::from(path)
     }
 }
 
@@ -357,5 +423,18 @@ mod tests {
         let mut events = vec![preedit("^"), preedit("")];
         filter.filter(&mut events);
         assert_eq!(events.len(), 2, "an empty one cancelling a composition is kept");
+    }
+
+    #[test]
+    fn subscribed_connections_carry_events_and_answers() {
+        let event: Incoming = serde_json::from_str(r#"{"type":"show"}"#).unwrap();
+        assert!(matches!(
+            event,
+            Incoming::Event(Event::Show {
+                activation_token: None
+            })
+        ));
+        let answer: Incoming = serde_json::from_str(r#"{"type":"ok"}"#).unwrap();
+        assert!(matches!(answer, Incoming::Response(Response::Ok)));
     }
 }

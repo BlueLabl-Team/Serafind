@@ -38,7 +38,7 @@ fn index_of(paths: &[&str]) -> SharedIndex {
 }
 
 fn bar_with(settings: Settings, index: SharedIndex, home: &Path) -> Bar {
-    Bar::new(settings, Searcher::new(index, home.to_path_buf()))
+    Bar::new(settings, Searcher::local(index, home.to_path_buf()))
 }
 
 fn harness(bar: Bar) -> Harness<'static, Bar> {
