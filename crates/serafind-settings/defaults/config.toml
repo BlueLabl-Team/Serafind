@@ -84,3 +84,9 @@ toggle = "Super+F"
 # A different shortcut on one system only (remove the # to use it).
 # windows = "Ctrl+Alt+Space"
 # linux = "Super+F"
+
+[tray]
+# Show an icon in the notification area (system tray): click it to open the bar, or open its menu
+# to index again, open these settings or quit. On GNOME, the icon needs the "AppIndicator and
+# KStatusNotifierItem Support" extension.
+enabled = false
