@@ -105,6 +105,7 @@ cargo insta review             # review changed snapshots
 | 7 | Content mode: on-demand parallel search | ⬜ |
 | 8 | TOML settings (shortcut, indexed and excluded folders, theme), start with the session | ⬜ |
 | 9 | GitHub Actions: build, tests, releases (Linux and Windows executables) | ⬜ |
+| 10 | Integration in third-party software through their plugin / extension systems (library, IPC protocol or C ABI: to be decided) | ⬜ |
 
 ## License
 
