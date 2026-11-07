@@ -96,7 +96,7 @@ cargo insta review             # review changed snapshots
 | # | Step | Status |
 |---|---|---|
 | 0 | Workspace, test tooling, roadmap | ✅ |
-| 1 | `core`: search syntax (PowerHive grammar + mode keywords), matching, ranking (fuzzy / prefix) | ⬜ |
+| 1 | `core`: search syntax (PowerHive grammar + mode keywords), matching, ranking (fuzzy / prefix) | ✅ |
 | 2 | `index`: parallel first walk, filesystem watching, exclusions, benchmarks | ⬜ |
 | 3 | Search bar (egui): input, chips, results, keyboard navigation, `in:` completion | ⬜ |
 | 4 | Resident process: single instance, `serafind toggle`, global shortcut (X11, Windows, Wayland portal), tray icon | ⬜ |
@@ -105,6 +105,7 @@ cargo insta review             # review changed snapshots
 | 7 | Content mode: on-demand parallel search | ⬜ |
 | 8 | TOML settings (shortcut, indexed and excluded folders, theme), start with the session | ⬜ |
 | 9 | GitHub Actions: build, tests, releases (Linux and Windows executables) | ⬜ |
+| 10 | Integration in third-party software through their plugin / extension systems (library, IPC protocol or C ABI: to be decided) | ⬜ |
 
 ## License
 
