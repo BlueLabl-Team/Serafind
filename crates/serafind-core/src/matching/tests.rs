@@ -30,14 +30,32 @@ fn folder(path: &str) -> Candidate<'_> {
 fn app(name: &str) -> Candidate<'_> {
     Candidate {
         name,
-        path: name,
+        folded_name: None,
+        depth: 0,
         kind: EntryKind::App,
+        id: 0,
     }
 }
 
 fn entry(path: &str, kind: EntryKind) -> Candidate<'_> {
     let name = path.rsplit('/').next().unwrap_or(path);
-    Candidate { name, path, kind }
+    let depth = u16::try_from(path.matches('/').count()).unwrap();
+    Candidate {
+        name,
+        folded_name: None,
+        depth,
+        kind,
+        id: 0,
+    }
+}
+
+/// Gives each candidate its position as id, to find its path back after ranking.
+fn numbered<'a>(candidates: impl IntoIterator<Item = Candidate<'a>>) -> Vec<Candidate<'a>> {
+    candidates
+        .into_iter()
+        .zip(0..)
+        .map(|(candidate, id)| Candidate { id, ..candidate })
+        .collect()
 }
 
 fn names<'a>(ranked: &Ranked<'a>) -> Vec<&'a str> {
@@ -97,6 +115,20 @@ fn mode_keeps_the_right_kinds(#[case] mode: SearchMode, #[case] expected: &[&str
 }
 
 #[test]
+fn ready_folded_names_give_the_same_results() {
+    let folded = crate::text::fold("Facturé-EDF.pdf", crate::text::CaseMatching::Ignore);
+    for line in ["facture edf", "fac*edf*", "-edf", "EDF", "factur"] {
+        let plain = file("Facturé-EDF.pdf");
+        let ready = Candidate {
+            folded_name: Some(&folded),
+            ..plain
+        };
+        let mut matcher = matcher(line, SearchMode::All);
+        assert_eq!(matcher.strict(&plain), matcher.strict(&ready), "{line:?}");
+    }
+}
+
+#[test]
 fn apps_have_no_extension() {
     let mut matcher = matcher("ext:desktop", SearchMode::All);
     assert!(matcher.strict(&app("firefox.desktop")).is_none());
@@ -125,20 +157,25 @@ fn match_ranks(#[case] line: &str, #[case] name: &str, #[case] rank: MatchRank) 
 
 #[test]
 fn ranking_order() {
-    let candidates = [
-        file("/home/me/a/b/c/support.txt"),
-        file("/home/me/final-report.pdf"),
-        file("/home/me/deep/down/report.pdf"),
-        file("/home/me/report.pdf"),
-        file("/home/me/reports-2026.ods"),
-        folder("/home/me/Reports"),
-        app("Report Designer"),
+    let paths = [
+        "/home/me/a/b/c/support.txt",
+        "/home/me/final-report.pdf",
+        "/home/me/deep/down/report.pdf",
+        "/home/me/report.pdf",
+        "/home/me/reports-2026.ods",
+        "/home/me/Reports",
+        "Report Designer",
     ];
+    let candidates = numbered(paths.iter().map(|&path| match path {
+        "/home/me/Reports" => folder(path),
+        "Report Designer" => app(path),
+        _ => file(path),
+    }));
     let ranked = matcher("report", SearchMode::All).best(candidates, 10);
     let paths: Vec<&str> = ranked
         .entries
         .iter()
-        .map(|(_, candidate)| candidate.path)
+        .map(|(_, candidate)| paths[candidate.id as usize])
         .collect();
     insta::assert_debug_snapshot!(paths);
     assert!(!ranked.is_fuzzy);

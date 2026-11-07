@@ -1,20 +1,13 @@
 //! In-memory file index of Serafind.
 //!
-//! Will hold every path under the indexed roots (home directory by default, minus the excluded
-//! folders), built by a parallel walk at start and kept up to date by watching the filesystem.
+//! Holds every folder and file under the indexed roots (the home directory by default, minus the
+//! excluded folders), built by a parallel walk ([`build`]) and kept up to date by the caller
+//! through [`Index::insert_path`], [`Index::remove_path`] and [`Index::rename_path`].
 
-#[cfg(test)]
-mod tests {
-    use assert_fs::prelude::*;
+mod exclusions;
+mod index;
+mod walk;
 
-    /// Wiring check for the filesystem test fixtures the index tests will rely on.
-    #[test]
-    fn temporary_trees_can_be_built() {
-        let root = assert_fs::TempDir::new().unwrap();
-        root.child("Documents/invoice-2026-03.pdf").touch().unwrap();
-        root.child("node_modules/left-pad/index.js").touch().unwrap();
-
-        assert!(root.child("Documents/invoice-2026-03.pdf").path().is_file());
-        assert!(root.child("node_modules/left-pad").path().is_dir());
-    }
-}
+pub use exclusions::{DEFAULT_NAMES, Exclusions};
+pub use index::{EntryId, Hit, Index, Kind, SearchResults};
+pub use walk::{WalkReport, add_subtree, add_tree, build};
