@@ -53,6 +53,18 @@ pub struct Window {
     pub top: f32,
     /// Screen where the bar opens.
     pub screen: Screen,
+    /// Linux only: how the window is shown.
+    pub backend: Backend,
+}
+
+/// Linux only: the display protocol of the bar window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Backend {
+    /// X11 (through `XWayland` on a Wayland desktop): exact position, always on top.
+    X11,
+    /// Native Wayland: sharper with fractional scaling, but the desktop chooses the position.
+    Wayland,
 }
 
 /// Where the bar opens.
@@ -213,6 +225,7 @@ impl Default for Window {
             width: 680,
             top: 0.25,
             screen: Screen::Mouse,
+            backend: Backend::X11,
         }
     }
 }

@@ -17,8 +17,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 pub use config::{
-    Appearance, Behavior, Chips, Config, Escape, IconSet, IndexSettings, Layout, ModeSelector, Results, Rows,
-    Screen, Shortcut, Window,
+    Appearance, Backend, Behavior, Chips, Config, Escape, IconSet, IndexSettings, Layout, ModeSelector,
+    Results, Rows, Screen, Shortcut, Window,
 };
 pub use error::SettingsError;
 pub use theme::{BUILT_IN, Color, Colors, Font, IconColors, Icons, Shape, Theme};

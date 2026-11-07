@@ -111,6 +111,7 @@ You need Rust (latest stable) and Git.
 git clone git@github.com:BlueLabl-Team/Serafind.git
 cd Serafind
 cargo build --release          # target/release/serafind
+cargo run --release -p serafind  # opens the bar (the global shortcut comes later)
 cargo test --workspace         # or: cargo nextest run --workspace
 cargo insta review             # review changed snapshots
 ```
@@ -123,7 +124,7 @@ cargo insta review             # review changed snapshots
 | 1 | `core`: search syntax (PowerHive grammar + mode keywords), matching, ranking (fuzzy / prefix) | ✅ |
 | 2 | `index`: parallel first walk, filesystem watching, exclusions, benchmarks | ✅ |
 | 3 | Settings and themes (TOML, defaults, validation, live reload) | ✅ |
-| 3 | Search bar (egui): input, chips, results, keyboard navigation, `in:` completion | ⬜ |
+| 3 | Search bar (egui): input, chips, results, keyboard navigation, `in:` completion | 🚧 |
 | 4 | Resident process: single instance, `serafind toggle`, global shortcut (X11, Windows, Wayland portal), tray icon | ⬜ |
 | 5 | Actions: open, show in the file manager, copy the path | ⬜ |
 | 6 | Apps mode: `.desktop` files (Linux), Start menu shortcuts (Windows) | ⬜ |
