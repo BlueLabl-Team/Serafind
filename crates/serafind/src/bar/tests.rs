@@ -216,6 +216,35 @@ fn the_selection_stays_when_the_settings_are_reloaded() {
 }
 
 #[test]
+fn enter_starts_an_application_and_other_actions_take_its_program() {
+    let firefox = serafind_apps::App {
+        id: "firefox.desktop".to_owned(),
+        name: "Firefox".to_owned(),
+        source: PathBuf::from("/usr/share/applications/firefox.desktop"),
+        executable: Some(PathBuf::from("/usr/bin/firefox")),
+        icon: None,
+        launch: serafind_apps::Launch::Command {
+            arguments: vec!["firefox".to_owned()],
+            terminal: false,
+            folder: None,
+        },
+    };
+    let searcher = Searcher::local_with_apps(index_of(&FILES), vec![firefox], PathBuf::from(HOME));
+    let mut harness = harness(Bar::new(Settings::defaults(SystemMode::Dark), searcher));
+    type_text(&mut harness, "firefox");
+    assert_eq!(row_names(&harness), ["Firefox"]);
+    press(&mut harness, Modifiers::NONE, Key::Enter);
+    press(&mut harness, Modifiers::COMMAND, Key::Enter);
+    assert_eq!(
+        harness.state_mut().take_requests(),
+        [
+            Request::Act(Action::Launch, PathBuf::from("firefox.desktop")),
+            Request::Act(Action::Reveal, PathBuf::from("/usr/bin/firefox")),
+        ]
+    );
+}
+
+#[test]
 fn ctrl_t_opens_a_terminal() {
     let mut harness = default_harness();
     type_text(&mut harness, "readme");

@@ -56,6 +56,17 @@ Every key can be changed in `[keys]` of `config.toml`. Opening, showing in the f
 
 The resident process does the actions. On Linux, it opens through the desktop portal (`OpenURI`), so that the desktop chooses the application, and falls back on `xdg-open`. The terminal is found automatically (`xdg-terminal-exec`, Ptyxis, GNOME Terminal, Konsole, kitty, Alacritty, WezTerm, foot, xterm; Windows Terminal or PowerShell), or set with `[actions] terminal`.
 
+### Applications
+
+The **Apps** mode, and the top of the **All** mode, list the installed applications, by their name in the desktop's language, with their own icon.
+
+- **Linux:** the `.desktop` files of the system, the user, Flatpak and Snap, as the applications menu shows them (hidden ones and those of other desktops are left out). Serafind starts them itself from their `Exec` line; those that run in a terminal (`Terminal=true`) open in the terminal of `[actions] terminal`.
+- **Windows:** the Start menu shortcuts and the Microsoft Store apps.
+- The list follows installs and removals.
+- On an application, Ctrl+Enter, Ctrl+C and Ctrl+T act on its program (e.g. `/usr/bin/firefox`).
+- `[behavior] learn_from_usage = true` puts the applications you start most often first.
+- `[appearance] app_icons = "generic"` shows the same icon for every application.
+
 ## Usage
 
 ```sh
@@ -179,11 +190,12 @@ cargo insta review             # review changed snapshots
 | 4 | Resident process: single instance, `serafind toggle`, global shortcut (X11, Windows, Wayland portal), tray icon | ✅ |
 | 4b | Choose where the bar appears on Wayland (layer-shell, focus on X11, or another way: to be decided) | ⬜ |
 | 5 | Actions: open, show in the file manager, copy the path or name, terminal; configurable keys | ✅ |
-| 6 | Apps mode: `.desktop` files (Linux), Start menu shortcuts (Windows) | ⬜ |
+| 6 | Apps mode: `.desktop` files with Flatpak and Snap (Linux), Start menu and Store apps (Windows), real icons | ✅ |
 | 7 | Content mode: on-demand parallel search | ⬜ |
 | 8 | Start with the session; settings for indexed and excluded folders applied live | ⬜ |
 | 9 | GitHub Actions: build, tests, releases (Linux and Windows executables) | ⬜ |
 | 10 | Integration in third-party software through their plugin / extension systems (library, IPC protocol or C ABI: to be decided) | ⬜ |
+| Later | After the first release: actions of applications (e.g. Firefox's "New Private Window") as results | ⬜ |
 
 ## Known issues
 

@@ -1,11 +1,14 @@
 //! Runs a search line and prepares the rows to show.
 //!
-//! The resident process searches its index with [`search_index`]. The bar asks it through the
-//! local socket ([`Searcher::remote`]); tests give the bar an index directly ([`Searcher::local`]).
-//! Either way the bar understands the line itself, for its chips.
+//! The resident process searches its applications and its index with [`search`]. The bar asks
+//! it through the local socket ([`Searcher::remote`]); tests give the bar an index directly
+//! ([`Searcher::local`]). Either way the bar understands the line itself, for its chips.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
+
+use serafind_apps::App;
 
 use serafind_core::{Candidate, EntryKind, Matcher, ParseContext, Query, SearchMode, parse};
 use serafind_index::{Index, Kind};
@@ -13,6 +16,12 @@ use serafind_ipc::{Client, Request, Response, Results};
 
 /// An index that may not be built yet.
 pub type SharedIndex = Arc<RwLock<Option<Arc<RwLock<Index>>>>>;
+
+/// The installed applications, replaced when they change.
+pub type SharedApps = Arc<RwLock<Arc<Vec<App>>>>;
+
+/// How many times each application (by id) was started from Serafind.
+pub type Launches = HashMap<String, u32>;
 
 /// One result, ready to draw.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,6 +36,10 @@ pub struct Row {
     pub path: PathBuf,
     /// Characters of the name to highlight.
     pub highlights: Vec<usize>,
+    /// For an application: its id, to start it.
+    pub app: Option<String>,
+    /// For an application: its icon file.
+    pub icon: Option<PathBuf>,
 }
 
 /// What a search gave.
@@ -56,7 +69,7 @@ pub struct Outcome {
 
 enum Source {
     #[cfg(test)]
-    Local(SharedIndex),
+    Local(SharedIndex, Vec<App>),
     Remote(Mutex<Client>),
 }
 
@@ -71,8 +84,15 @@ impl Searcher {
     #[cfg(test)]
     #[must_use]
     pub fn local(index: SharedIndex, home: PathBuf) -> Self {
+        Self::local_with_apps(index, Vec::new(), home)
+    }
+
+    /// Searches an index and applications of this process (tests).
+    #[cfg(test)]
+    #[must_use]
+    pub fn local_with_apps(index: SharedIndex, apps: Vec<App>, home: PathBuf) -> Self {
         Self {
-            source: Source::Local(index),
+            source: Source::Local(index, apps),
             home,
         }
     }
@@ -93,7 +113,7 @@ impl Searcher {
     pub fn act(&self, action: serafind_ipc::Action, path: &Path) -> Result<(), String> {
         match &self.source {
             #[cfg(test)]
-            Source::Local(_) => {
+            Source::Local(..) => {
                 let _ = (action, path);
                 Ok(())
             }
@@ -141,18 +161,11 @@ impl Searcher {
     fn results(&self, line: &str, tab: SearchMode, max: usize) -> Option<Results> {
         match &self.source {
             #[cfg(test)]
-            Source::Local(shared) => {
+            Source::Local(shared, apps) => {
                 let index = shared.read().ok()?.clone();
-                Some(match index {
-                    Some(index) => {
-                        let query = understand(line, &self.home);
-                        search_index(&*index.read().ok()?, &query, tab, max, &self.home)
-                    }
-                    None => Results {
-                        indexing: true,
-                        ..Results::default()
-                    },
-                })
+                let index = index.as_ref().and_then(|index| index.read().ok());
+                let query = understand(line, &self.home);
+                Some(search(index.as_deref(), apps, None, &query, tab, max, &self.home))
             }
             Source::Remote(client) => {
                 let request = Request::Search {
@@ -181,13 +194,132 @@ pub fn understand(line: &str, home: &Path) -> Query {
     parse(line, &context)
 }
 
-/// Searches `index` and prepares the rows (names, shortened folders, highlights).
+/// Searches the applications and the index (`None` while it is being built), and prepares the
+/// rows (names, shortened folders, highlights). In the All mode applications come first. When
+/// one side matches strictly, the fuzzy matches of the other are left out. `launches` puts the
+/// applications started most often first, among equally good matches.
 #[must_use]
-pub fn search_index(index: &Index, query: &Query, tab: SearchMode, max: usize, home: &Path) -> Results {
+pub fn search(
+    index: Option<&Index>,
+    apps: &[App],
+    launches: Option<&Launches>,
+    query: &Query,
+    tab: SearchMode,
+    max: usize,
+    home: &Path,
+) -> Results {
     let mode = query.effective_mode(tab);
-    let found = index.search(query, mode, max);
     let mut matcher = Matcher::new(query, mode);
-    let rows = found
+    let wants_apps = matches!(mode, SearchMode::All | SearchMode::Apps) && query.start_folder.is_none();
+    let (mut app_rows, app_total, apps_fuzzy) = if wants_apps {
+        search_apps(&mut matcher, apps, launches, max, home)
+    } else {
+        (Vec::new(), 0, false)
+    };
+    let wants_files = mode != SearchMode::Apps;
+    let found = match index {
+        Some(index) if wants_files => Some((index.search(query, mode, max), index)),
+        _ => None,
+    };
+    let (mut file_rows, file_total, files_fuzzy, outside_index) = match &found {
+        Some((found, index)) => (
+            file_rows(&mut matcher, found, index, home),
+            found.total,
+            found.is_fuzzy,
+            found.outside_index,
+        ),
+        None => (Vec::new(), 0, false, false),
+    };
+    let (mut app_total, mut file_total) = (app_total, file_total);
+    if !app_rows.is_empty() && !apps_fuzzy && files_fuzzy {
+        file_rows.clear();
+        file_total = 0;
+    }
+    if !file_rows.is_empty() && !files_fuzzy && apps_fuzzy {
+        app_rows.clear();
+        app_total = 0;
+    }
+    let fuzzy = (app_rows.is_empty() || apps_fuzzy)
+        && (file_rows.is_empty() || files_fuzzy)
+        && !(app_rows.is_empty() && file_rows.is_empty());
+    let mut rows = app_rows;
+    rows.extend(file_rows);
+    rows.truncate(max);
+    Results {
+        mode: Some(to_wire_mode(mode)),
+        rows,
+        total: (app_total + file_total) as u64,
+        fuzzy,
+        outside_index,
+        indexing: wants_files && index.is_none(),
+    }
+}
+
+/// The best applications: rows, how many matched, and whether they come from the fuzzy fallback.
+fn search_apps(
+    matcher: &mut Matcher,
+    apps: &[App],
+    launches: Option<&Launches>,
+    max: usize,
+    home: &Path,
+) -> (Vec<serafind_ipc::Row>, usize, bool) {
+    let candidates = apps.iter().enumerate().map(|(position, app)| Candidate {
+        name: &app.name,
+        folded_name: None,
+        depth: 0,
+        kind: EntryKind::App,
+        id: u32::try_from(position).unwrap_or(u32::MAX),
+    });
+    let mut ranked = matcher.best(candidates, apps.len().max(1));
+    if let Some(launches) = launches {
+        let count = |id: u32| {
+            apps.get(id as usize)
+                .and_then(|app| launches.get(&app.id))
+                .copied()
+                .unwrap_or(0)
+        };
+        // Stable: equally good and equally used apps keep their order.
+        ranked
+            .entries
+            .sort_by_key(|(score, candidate)| (score.match_rank(), std::cmp::Reverse(count(candidate.id))));
+    }
+    ranked.entries.truncate(max);
+    let rows = ranked
+        .entries
+        .iter()
+        .filter_map(|(_, candidate)| {
+            let app = apps.get(candidate.id as usize)?;
+            let highlights = matcher
+                .highlights(candidate, ranked.is_fuzzy)
+                .into_iter()
+                .map(|index| u32::try_from(index).unwrap_or(u32::MAX))
+                .collect();
+            let path = app.executable.as_ref().unwrap_or(&app.source);
+            Some(serafind_ipc::Row {
+                name: app.name.clone(),
+                location: app
+                    .executable
+                    .as_ref()
+                    .map_or_else(String::new, |program| shorten(program, home)),
+                path: path.to_string_lossy().into_owned(),
+                kind: serafind_ipc::Kind::App,
+                highlights,
+                app: Some(app.id.clone()),
+                icon: app.icon.as_ref().map(|icon| icon.to_string_lossy().into_owned()),
+            })
+        })
+        .collect();
+    (rows, ranked.total, ranked.is_fuzzy)
+}
+
+/// The rows of the files and folders found.
+fn file_rows(
+    matcher: &mut Matcher,
+    found: &serafind_index::SearchResults,
+    index: &Index,
+    home: &Path,
+) -> Vec<serafind_ipc::Row> {
+    found
         .hits
         .iter()
         .map(|hit| {
@@ -215,17 +347,11 @@ pub fn search_index(index: &Index, query: &Query, tab: SearchMode, max: usize, h
                 path: path.to_string_lossy().into_owned(),
                 kind: to_wire_kind(kind),
                 highlights,
+                app: None,
+                icon: None,
             }
         })
-        .collect();
-    Results {
-        mode: Some(to_wire_mode(mode)),
-        rows,
-        total: found.total as u64,
-        fuzzy: found.is_fuzzy,
-        outside_index: found.outside_index,
-        indexing: false,
-    }
+        .collect()
 }
 
 fn fill(outcome: &mut Outcome, results: Results) {
@@ -245,6 +371,8 @@ fn fill(outcome: &mut Outcome, results: Results) {
             kind: from_wire_kind(row.kind),
             path: PathBuf::from(row.path),
             highlights: row.highlights.into_iter().map(|index| index as usize).collect(),
+            app: row.app,
+            icon: row.icon.map(PathBuf::from),
         })
         .collect();
 }
@@ -351,6 +479,136 @@ mod tests {
         let outcome = searcher(&["x/"]).run("d: x", SearchMode::Files, 10);
         assert_eq!(outcome.mode, SearchMode::Folders);
         assert_eq!(outcome.rows.len(), 1);
+    }
+
+    fn app(id: &str, name: &str) -> App {
+        App {
+            id: id.to_owned(),
+            name: name.to_owned(),
+            source: PathBuf::from(format!("/usr/share/applications/{id}")),
+            executable: Some(PathBuf::from(format!(
+                "/usr/bin/{}",
+                id.trim_end_matches(".desktop")
+            ))),
+            icon: Some(PathBuf::from("/icons/app.svg")),
+            launch: serafind_apps::Launch::Command {
+                arguments: vec![id.to_owned()],
+                terminal: false,
+                folder: None,
+            },
+        }
+    }
+
+    fn apps() -> Vec<App> {
+        vec![
+            app("firefox.desktop", "Firefox"),
+            app("org.gnome.Nautilus.desktop", "Files"),
+            app("libreoffice-writer.desktop", "LibreOffice Writer"),
+        ]
+    }
+
+    fn found(paths: &[&str], line: &str, mode: SearchMode, launches: Option<&Launches>) -> Results {
+        let mut index = Index::new();
+        index.add_root(Path::new("/home/me"));
+        for path in paths {
+            index.insert_path(&Path::new("/home/me").join(path), Kind::File);
+        }
+        let home = Path::new("/home/me");
+        search(
+            Some(&index),
+            &apps(),
+            launches,
+            &understand(line, home),
+            mode,
+            10,
+            home,
+        )
+    }
+
+    fn names(results: &Results) -> Vec<&str> {
+        results.rows.iter().map(|row| row.name.as_str()).collect()
+    }
+
+    #[test]
+    fn applications_come_first_in_all_mode() {
+        let results = found(&["files-backup.zip"], "files", SearchMode::All, None);
+        assert_eq!(names(&results), ["Files", "files-backup.zip"]);
+        assert_eq!(results.total, 2);
+        let app = &results.rows[0];
+        assert_eq!(app.kind, serafind_ipc::Kind::App);
+        assert_eq!(app.app.as_deref(), Some("org.gnome.Nautilus.desktop"));
+        assert_eq!(app.path, "/usr/bin/org.gnome.Nautilus");
+        assert_eq!(app.location, "/usr/bin/org.gnome.Nautilus", "the program");
+        assert_eq!(app.icon.as_deref(), Some("/icons/app.svg"));
+        assert_eq!(app.highlights, [0, 1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn modes_and_filters_choose_apps_or_files() {
+        let paths = ["firefox-notes.txt"];
+        assert_eq!(
+            names(&found(&paths, "firefox", SearchMode::Apps, None)),
+            ["Firefox"]
+        );
+        assert_eq!(
+            names(&found(&paths, "firefox", SearchMode::Files, None)),
+            ["firefox-notes.txt"]
+        );
+        assert_eq!(
+            names(&found(&paths, "firefox ext:txt", SearchMode::All, None)),
+            ["firefox-notes.txt"]
+        );
+        // `in:` searches a folder: no applications there.
+        let outside = found(&paths, "firefox in:/tmp", SearchMode::All, None);
+        assert!(names(&outside).is_empty());
+        assert!(outside.outside_index);
+    }
+
+    #[test]
+    fn strict_matches_hide_the_fuzzy_ones_of_the_other_side() {
+        // "wrter" only matches the app by fuzzy matching; the file matches strictly.
+        let results = found(&["wrter.txt"], "wrter", SearchMode::All, None);
+        assert_eq!(names(&results), ["wrter.txt"]);
+        assert!(!results.fuzzy);
+        let results = found(&[], "wrter", SearchMode::All, None);
+        assert_eq!(names(&results), ["LibreOffice Writer"]);
+        assert!(results.fuzzy);
+    }
+
+    #[test]
+    fn applications_used_most_come_first() {
+        let launches = Launches::from([("firefox.desktop".to_owned(), 5)]);
+        // Files and Firefox start with "f" (same rank, shorter first); Writer only contains it.
+        let plain = found(&[], "f", SearchMode::Apps, None);
+        assert_eq!(names(&plain), ["Files", "Firefox", "LibreOffice Writer"]);
+        let learned = found(&[], "f", SearchMode::Apps, Some(&launches));
+        assert_eq!(names(&learned), ["Firefox", "Files", "LibreOffice Writer"]);
+    }
+
+    #[test]
+    fn applications_without_an_index() {
+        let home = Path::new("/home/me");
+        let results = search(
+            None,
+            &apps(),
+            None,
+            &understand("fire", home),
+            SearchMode::All,
+            10,
+            home,
+        );
+        assert_eq!(names(&results), ["Firefox"]);
+        assert!(results.indexing);
+        let results = search(
+            None,
+            &apps(),
+            None,
+            &understand("fire", home),
+            SearchMode::Apps,
+            10,
+            home,
+        );
+        assert!(!results.indexing);
     }
 
     #[test]

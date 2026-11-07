@@ -45,6 +45,18 @@ pub struct Appearance {
     pub font_family: Option<String>,
     /// Replaces the theme's icon set.
     pub icons: Option<IconSet>,
+    /// Icons of applications: their own, or the generic application icon of the icon set.
+    pub app_icons: AppIcons,
+}
+
+/// Icons of applications.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AppIcons {
+    /// Each application's own icon (from the icon theme of the desktop).
+    Real,
+    /// The application icon of the icon set, the same for all.
+    Generic,
 }
 
 /// `[bar]`: every dimension of the bar, whatever the theme.
@@ -166,6 +178,8 @@ pub struct Behavior {
     pub close_after_copy: bool,
     /// Close the bar after opening a terminal.
     pub close_after_terminal: bool,
+    /// Put the applications started most often first (counts kept in `usage.json`).
+    pub learn_from_usage: bool,
 }
 
 /// How a result is opened with the mouse.
@@ -354,6 +368,7 @@ impl Default for Appearance {
             light_theme: "light".to_owned(),
             font_family: None,
             icons: None,
+            app_icons: AppIcons::Real,
         }
     }
 }
@@ -402,6 +417,7 @@ impl Default for Behavior {
             close_after_open: true,
             close_after_copy: false,
             close_after_terminal: true,
+            learn_from_usage: false,
         }
     }
 }

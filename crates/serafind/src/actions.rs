@@ -1,9 +1,10 @@
-//! What can be done with a result: open it, show it in its folder, open a terminal there. Done
-//! by the resident process, so that the bar can close at once.
+//! What can be done with a result: open it, show it in its folder, open a terminal there, start
+//! an application. Done by the resident process, so that the bar can close at once.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use serafind_apps::{App, Launch, find_program};
 use serafind_ipc::Action;
 
 /// Does `action` on `path`.
@@ -18,6 +19,50 @@ pub fn perform(action: Action, path: &Path, terminal: &str, token: Option<&str>)
         Action::Open => open(path, token),
         Action::Reveal => reveal(path, token),
         Action::Terminal => open_terminal(&folder_of(path), terminal, token),
+        Action::Launch => Err("an application is started by its id".to_owned()),
+    }
+}
+
+/// Starts an application, in a terminal when it asks for one.
+///
+/// # Errors
+/// What went wrong, to show to the user.
+pub fn launch(app: &App, terminal: &str, token: Option<&str>) -> Result<(), String> {
+    match &app.launch {
+        Launch::Command {
+            arguments,
+            terminal: in_terminal,
+            folder,
+        } => {
+            let home = dirs::home_dir().unwrap_or_default();
+            let folder = folder
+                .as_deref()
+                .filter(|folder| folder.is_dir())
+                .unwrap_or(&home);
+            if *in_terminal {
+                let available = |program: &str| find_program(program).is_some();
+                let Some(mut command) = terminal_command(terminal, folder, Some(arguments), &available)
+                else {
+                    return Err(format!("{} needs a terminal, and none was found", app.name));
+                };
+                return spawn(&mut command, token);
+            }
+            let (program, rest) = arguments
+                .split_first()
+                .ok_or_else(|| format!("{} has no command", app.name))?;
+            let mut command = Command::new(program);
+            command.args(rest).current_dir(folder);
+            spawn(&mut command, token)
+        }
+        Launch::Open(target) => {
+            #[cfg(windows)]
+            {
+                let _ = token;
+                spawn(Command::new("explorer").arg(target), None)
+            }
+            #[cfg(not(windows))]
+            open(target, token)
+        }
     }
 }
 
@@ -82,7 +127,8 @@ fn reveal(path: &Path, token: Option<&str>) -> Result<(), String> {
 
 /// Opens a terminal in `dir`.
 fn open_terminal(dir: &Path, setting: &str, token: Option<&str>) -> Result<(), String> {
-    let Some(mut command) = terminal_command(setting, dir, &|program| find_program(program).is_some()) else {
+    let Some(mut command) = terminal_command(setting, dir, None, &|program| find_program(program).is_some())
+    else {
         return Err(
             "no terminal found: set one in config.toml ([actions] terminal = \"my-terminal\")".to_owned(),
         );
@@ -97,52 +143,68 @@ fn open_terminal(dir: &Path, setting: &str, token: Option<&str>) -> Result<(), S
     spawn(&mut command, token)
 }
 
-/// Terminals tried by `terminal = "auto"`, with the arguments that open them in a folder.
+/// A terminal tried by `terminal = "auto"`: its program, the arguments that open it in a folder,
+/// and the ones that come before a command to run in it.
+type Terminal = (&'static str, &'static [&'static str], &'static [&'static str]);
+
 #[cfg(not(windows))]
-const TERMINALS: &[(&str, &[&str])] = &[
-    ("xdg-terminal-exec", &[]),
-    ("ptyxis", &["--new-window", "--working-directory", "{dir}"]),
-    ("gnome-terminal", &["--working-directory={dir}"]),
-    ("konsole", &["--workdir", "{dir}"]),
-    ("kitty", &["--directory", "{dir}"]),
-    ("alacritty", &["--working-directory", "{dir}"]),
-    ("wezterm", &["start", "--cwd", "{dir}"]),
-    ("foot", &["--working-directory={dir}"]),
-    ("xterm", &[]),
+const TERMINALS: &[Terminal] = &[
+    ("xdg-terminal-exec", &[], &[]),
+    (
+        "ptyxis",
+        &["--new-window", "--working-directory", "{dir}"],
+        &["--"],
+    ),
+    ("gnome-terminal", &["--working-directory={dir}"], &["--"]),
+    ("konsole", &["--workdir", "{dir}"], &["-e"]),
+    ("kitty", &["--directory", "{dir}"], &[]),
+    ("alacritty", &["--working-directory", "{dir}"], &["-e"]),
+    ("wezterm", &["start", "--cwd", "{dir}"], &["--"]),
+    ("foot", &["--working-directory={dir}"], &[]),
+    ("xterm", &[], &["-e"]),
 ];
 
 #[cfg(windows)]
-const TERMINALS: &[(&str, &[&str])] = &[("wt.exe", &["-d", "{dir}"]), ("powershell.exe", &["-NoExit"])];
+const TERMINALS: &[Terminal] = &[
+    ("wt.exe", &["-d", "{dir}"], &[]),
+    ("powershell.exe", &["-NoExit"], &["-Command"]),
+];
 
-/// The command that opens a terminal in `dir`: found with `"auto"`, or the one of the setting
-/// (`{dir}` replaced; without it, the terminal starts in `dir`). `None` when none is found.
-fn terminal_command(setting: &str, dir: &Path, available: &dyn Fn(&str) -> bool) -> Option<Command> {
+/// The command that opens a terminal in `dir`, running `run` when given: found with `"auto"`, or
+/// the one of the setting (`{dir}` replaced; without it, the terminal starts in `dir`; `run` is
+/// added at the end). `None` when none is found.
+fn terminal_command(
+    setting: &str,
+    dir: &Path,
+    run: Option<&[String]>,
+    available: &dyn Fn(&str) -> bool,
+) -> Option<Command> {
     let dir_text = dir.to_string_lossy();
-    let (program, arguments): (String, Vec<String>) = if setting.trim() == "auto" {
-        let (program, arguments) = TERMINALS.iter().find(|(program, _)| available(program))?;
-        (
-            (*program).to_owned(),
-            arguments
-                .iter()
-                .map(|argument| argument.replace("{dir}", &dir_text))
-                .collect(),
-        )
+    let mut arguments: Vec<String>;
+    let program: String;
+    if setting.trim() == "auto" {
+        let (name, in_dir, before_run) = TERMINALS.iter().find(|(name, _, _)| available(name))?;
+        program = (*name).to_owned();
+        arguments = in_dir
+            .iter()
+            .map(|argument| argument.replace("{dir}", &dir_text))
+            .collect();
+        if run.is_some() {
+            arguments.extend(before_run.iter().map(|argument| (*argument).to_owned()));
+        }
     } else {
         let mut words = setting
             .split_whitespace()
             .map(|word| word.replace("{dir}", &dir_text));
-        (words.next()?, words.collect())
-    };
+        program = words.next()?;
+        arguments = words.collect();
+    }
+    if let Some(run) = run {
+        arguments.extend(run.iter().cloned());
+    }
     let mut command = Command::new(program);
     command.args(arguments).current_dir(dir);
     Some(command)
-}
-
-/// Finds a program in `PATH`.
-fn find_program(program: &str) -> Option<PathBuf> {
-    std::env::split_paths(&std::env::var_os("PATH")?)
-        .map(|folder| folder.join(program))
-        .find(|candidate| candidate.is_file())
 }
 
 /// Starts a program and collects it when it ends.
@@ -209,8 +271,10 @@ mod tests {
     #[test]
     fn auto_takes_the_first_terminal_found() {
         let dir = Path::new("/home/me/My Projects");
-        let command =
-            terminal_command("auto", dir, &|program| program == "kitty" || program == "xterm").unwrap();
+        let command = terminal_command("auto", dir, None, &|program| {
+            program == "kitty" || program == "xterm"
+        })
+        .unwrap();
         assert_eq!(command.get_program(), "kitty");
         assert_eq!(arguments(&command), ["--directory", "/home/me/My Projects"]);
         assert_eq!(command.get_current_dir(), Some(dir));
@@ -218,18 +282,58 @@ mod tests {
 
     #[test]
     fn no_terminal_found() {
-        assert!(terminal_command("auto", Path::new("/tmp"), &|_| false).is_none());
+        assert!(terminal_command("auto", Path::new("/tmp"), None, &|_| false).is_none());
     }
 
     #[test]
     fn custom_terminal_command() {
         let dir = Path::new("/srv/data");
-        let command = terminal_command("myterm --cwd {dir} --big", dir, &|_| false).unwrap();
+        let command = terminal_command("myterm --cwd {dir} --big", dir, None, &|_| false).unwrap();
         assert_eq!(command.get_program(), "myterm");
         assert_eq!(arguments(&command), ["--cwd", "/srv/data", "--big"]);
-        let command = terminal_command("myterm", dir, &|_| false).unwrap();
+        let command = terminal_command("myterm", dir, None, &|_| false).unwrap();
         assert!(arguments(&command).is_empty());
         assert_eq!(command.get_current_dir(), Some(dir));
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn terminal_applications_run_in_the_terminal() {
+        let run = ["htop".to_owned(), "-d".to_owned(), "10".to_owned()];
+        let dir = Path::new("/home/me");
+        let command =
+            terminal_command("auto", dir, Some(&run), &|program| program == "gnome-terminal").unwrap();
+        assert_eq!(
+            arguments(&command),
+            ["--working-directory=/home/me", "--", "htop", "-d", "10"]
+        );
+        let command = terminal_command("kitty --hold", dir, Some(&run), &|_| false).unwrap();
+        assert_eq!(arguments(&command), ["--hold", "htop", "-d", "10"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn applications_are_started() {
+        let folder = assert_fs::TempDir::new().unwrap();
+        let marker = folder.path().join("started");
+        let app = App {
+            id: "touch.desktop".to_owned(),
+            name: "Touch".to_owned(),
+            source: PathBuf::from("/apps/touch.desktop"),
+            executable: None,
+            icon: None,
+            launch: Launch::Command {
+                arguments: vec!["touch".to_owned(), marker.to_string_lossy().into_owned()],
+                terminal: false,
+                folder: Some(folder.path().to_path_buf()),
+            },
+        };
+        launch(&app, "auto", None).unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !marker.exists() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(marker.exists());
     }
 
     #[test]

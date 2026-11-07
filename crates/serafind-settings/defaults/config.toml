@@ -14,6 +14,8 @@ light_theme = "light"
 # Override the theme's font and icons (remove the # to use them).
 # font_family = "Inter"   # "Inter" (built in), an installed font name, or a .ttf / .otf path
 # icons = "phosphor"      # "phosphor" or "none"
+# Icons of applications: "real" (each one's own icon) or "generic" (the same icon for all).
+app_icons = "real"
 
 [bar]
 # Dimensions of the bar, in logical pixels, whatever the theme.
@@ -66,6 +68,9 @@ close_after_open = true
 close_after_copy = false
 # Close the bar after opening a terminal.
 close_after_terminal = true
+# Put the applications you start most often first. Counts are kept in usage.json, next to the
+# log (~/.local/state/serafind on Linux).
+learn_from_usage = false
 
 [actions]
 # Terminal opened in the folder of a result (the folder itself, or the folder of a file).
