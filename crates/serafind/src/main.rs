@@ -3,6 +3,10 @@
 //! `serafind` starts the resident process in the background, or opens / closes the bar when it
 //! already runs. The resident process starts the bar process (`serafind bar`) when needed.
 
+// Windows: a graphical program, so that no console window opens with it (at login, from the
+// Start menu). From a terminal, it attaches to the terminal's console to print.
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 mod actions;
 mod app;
 mod app_icon;
@@ -68,6 +72,8 @@ enum Command {
 }
 
 fn main() -> ExitCode {
+    #[cfg(windows)]
+    attach_to_console();
     let mut command = Command::Start;
     let mut settings_dir = serafind_settings::default_dir();
     let mut arguments = std::env::args().skip(1);
@@ -478,5 +484,17 @@ fn window_icon() -> egui::IconData {
         rgba: logo.rgba,
         width: logo.width,
         height: logo.height,
+    }
+}
+
+/// Prints into the console of the terminal Serafind was started from, if any (Windows: the
+/// program has no console of its own).
+#[cfg(windows)]
+fn attach_to_console() {
+    use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
+    // SAFETY: attaches this process to its parent's console; fails harmlessly when there is none.
+    #[allow(unsafe_code)]
+    unsafe {
+        AttachConsole(ATTACH_PARENT_PROCESS);
     }
 }
