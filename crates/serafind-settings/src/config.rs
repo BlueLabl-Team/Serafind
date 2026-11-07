@@ -226,9 +226,9 @@ impl Default for Appearance {
 impl Default for BarSettings {
     fn default() -> Self {
         Self {
-            width: 760,
-            padding: 12,
-            row_height: 38,
+            width: 680,
+            padding: 10,
+            row_height: 34,
             font_size: 14,
             visible_results: 8,
             max_results: 50,

@@ -17,10 +17,10 @@ light_theme = "light"
 
 [bar]
 # Dimensions of the bar, in logical pixels, whatever the theme.
-width = 760
-padding = 12
+width = 680
+padding = 10
 # Height of a result row.
-row_height = 38
+row_height = 34
 # Text size; the search input is a little larger.
 font_size = 14
 # Rows shown before scrolling, and results kept at most.

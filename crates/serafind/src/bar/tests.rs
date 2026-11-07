@@ -300,3 +300,39 @@ fn preview() {
         image.save(folder.join(format!("{name}.png"))).expect("save");
     }
 }
+
+/// Renders the bar inside the same frame as the window (shadow margin), at the window width.
+#[test]
+#[ignore = "writes images for a visual check"]
+fn preview_window() {
+    let Some(folder) = std::env::var_os("SERAFIND_PREVIEW") else {
+        return;
+    };
+    let folder = PathBuf::from(folder);
+    for (name, line) in [("window-empty", ""), ("window-results", "fact")] {
+        let bar = bar_with(Settings::defaults(SystemMode::Dark), index_of(&FILES), Path::new(HOME));
+        let settings = bar.settings().clone();
+        let width = f32::from(settings.config.bar.width) + 2.0 * f32::from(crate::app::SHADOW_MARGIN);
+        let mut harness = Harness::builder()
+            .with_size(egui::vec2(width, 320.0))
+            .with_context_setup(move |ctx| {
+                let _ = apply_theme(ctx, &settings);
+            })
+            .build_ui_state(
+                |ui, bar: &mut Bar| {
+                    let rect = egui::Frame::new()
+                        .inner_margin(egui::Margin::same(crate::app::SHADOW_MARGIN))
+                        .show(ui, |ui| bar.ui(ui))
+                        .response
+                        .rect;
+                    eprintln!("outer frame rect: {rect:?} (window width {})", ui.ctx().content_rect().width());
+                },
+                bar,
+            );
+        harness.run();
+        if !line.is_empty() {
+            type_text(&mut harness, line);
+        }
+        harness.render().expect("render").save(folder.join(format!("{name}.png"))).expect("save");
+    }
+}
