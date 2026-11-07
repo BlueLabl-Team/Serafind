@@ -1,15 +1,18 @@
 //! Which entries a query keeps, and in which order.
 //!
 //! Strict matching first (as in PowerHive): every word must be contained in the name (a word with
-//! `*` or `?` is a pattern for the whole name), no excluded word may be, the extension must be one
+//! `*` or `?` is a pattern found anywhere in the name; `^` anchors it at the start of the name and
+//! `$` at the end), no excluded word may be, the extension must be one
 //! of `ext:`, and the kind must fit the mode. When no entry matches strictly, the words are matched
 //! fuzzily instead (`fctr` finds `facture`); the other criteria still apply.
 //!
 //! Ranking, best first: in All mode apps come before folders and files; then exact name, name
 //! starting with the first word, every word starting a word of the name, other matches; then
-//! shorter paths, shorter names, and alphabetical order.
+//! shorter paths, shorter names, alphabetical order and the caller's id.
 
+use std::borrow::Cow;
 use std::cmp::{Ordering, Reverse};
+use std::collections::BinaryHeap;
 
 use nucleo_matcher::pattern::{Atom, AtomKind, CaseMatching as FuzzyCase, Normalization};
 use nucleo_matcher::{Config, Utf32Str};
@@ -33,10 +36,25 @@ pub enum EntryKind {
 pub struct Candidate<'a> {
     /// The name shown and matched: file or folder name, or the app name.
     pub name: &'a str,
-    /// The full path (or app identifier), used for ranking only.
-    pub path: &'a str,
+    /// The name already folded with case ignored ([`text::fold`]), when the caller keeps it ready;
+    /// saves folding it again for every word.
+    pub folded_name: Option<&'a str>,
+    /// How deep the entry is (number of parent folders): shorter paths rank first.
+    pub depth: u16,
     /// What the entry is.
     pub kind: EntryKind,
+    /// The caller's identifier for the entry (an index entry, an app...), given back with the result.
+    pub id: u32,
+}
+
+impl Candidate<'_> {
+    /// The name folded for `case`: the ready one when it fits, else folded now.
+    fn folded(&self, case: CaseMatching) -> Cow<'_, str> {
+        match (case, self.folded_name) {
+            (CaseMatching::Ignore, Some(folded)) => Cow::Borrowed(folded),
+            _ => Cow::Owned(text::fold(self.name, case)),
+        }
+    }
 }
 
 /// How well a candidate matches; smaller is better.
@@ -45,7 +63,7 @@ pub struct Score {
     kind_rank: u8,
     match_rank: MatchRank,
     fuzzy: Reverse<u32>,
-    depth: usize,
+    depth: u16,
     name_length: usize,
 }
 
@@ -98,7 +116,14 @@ impl Matcher {
         let fuzzy_atoms = query
             .words
             .iter()
-            .map(|word| word.replace(['*', '?'], ""))
+            .map(|word| {
+                let word = if is_pattern(word) {
+                    word.trim_start_matches('^').trim_end_matches('$')
+                } else {
+                    word
+                };
+                word.replace(['*', '?'], "")
+            })
             .filter(|word| !word.is_empty())
             .map(|word| {
                 let needle = Needle::new(&word);
@@ -133,10 +158,10 @@ impl Matcher {
 
     /// The score of a candidate that matches strictly; `None` otherwise.
     pub fn strict(&mut self, candidate: &Candidate<'_>) -> Option<Score> {
-        if !self.passes_filters(candidate) || !self.words.iter().all(|word| word.is_in(candidate.name)) {
+        if !self.passes_filters(candidate) || !self.words.iter().all(|word| word.is_in(candidate)) {
             return None;
         }
-        Some(self.score(candidate, self.strict_rank(candidate.name), 0))
+        Some(self.score(candidate, self.strict_rank(candidate), 0))
     }
 
     /// The score of a candidate found by fuzzy matching of the words; `None` otherwise.
@@ -158,26 +183,28 @@ impl Matcher {
         candidates: impl IntoIterator<Item = Candidate<'a>>,
         limit: usize,
     ) -> Ranked<'a> {
-        let mut strict = Vec::new();
-        let mut fuzzy = Vec::new();
+        self.scan(candidates, limit).finish()
+    }
+
+    /// Matches a part of the candidates. Parts scanned separately (in parallel, each with its own
+    /// matcher) are put together with [`Partial::merge`], then [`Partial::finish`] gives the result.
+    pub fn scan<'a>(
+        &mut self,
+        candidates: impl IntoIterator<Item = Candidate<'a>>,
+        limit: usize,
+    ) -> Partial<'a> {
+        let mut partial = Partial::new(limit);
         for candidate in candidates {
             if let Some(score) = self.strict(&candidate) {
-                strict.push((score, candidate));
-            } else if strict.is_empty()
+                partial.strict.push(score, candidate);
+            } else if partial.strict.total == 0
                 && let Some(score) = self.fuzzy(&candidate)
             {
-                fuzzy.push((score, candidate));
+                // Fuzzy matches only matter while nothing matches strictly.
+                partial.fuzzy.push(score, candidate);
             }
         }
-        let is_fuzzy = strict.is_empty() && !fuzzy.is_empty();
-        let mut found = if is_fuzzy { fuzzy } else { strict };
-        let total = found.len();
-        keep_best(&mut found, limit);
-        Ranked {
-            entries: found,
-            total,
-            is_fuzzy,
-        }
+        partial
     }
 
     fn passes_filters(&self, candidate: &Candidate<'_>) -> bool {
@@ -187,25 +214,23 @@ impl Matcher {
             SearchMode::Folders => candidate.kind == EntryKind::Folder,
             SearchMode::Files | SearchMode::Content => candidate.kind == EntryKind::File,
         };
-        if !kind_fits || self.excluded_words.iter().any(|word| word.is_in(candidate.name)) {
+        if !kind_fits || self.excluded_words.iter().any(|word| word.is_in(candidate)) {
             return false;
         }
         if self.extensions.is_empty() && self.excluded_extensions.is_empty() {
             return true;
         }
-        let extension = extension_of(candidate);
-        let has = |list: &[String]| {
-            extension
-                .as_ref()
-                .is_some_and(|extension| list.contains(extension))
-        };
+        let folded = candidate.folded(CaseMatching::Ignore);
+        let extension = extension_of(candidate, &folded);
+        let has =
+            |list: &[String]| extension.is_some_and(|extension| list.iter().any(|item| item == extension));
         (self.extensions.is_empty() || has(&self.extensions)) && !has(&self.excluded_extensions)
     }
 
-    fn strict_rank(&self, name: &str) -> MatchRank {
+    fn strict_rank(&self, candidate: &Candidate<'_>) -> MatchRank {
         if let Some(whole) = &self.whole {
-            let folded = text::fold(name, whole.case());
-            let stem = folded.rsplit_once('.').map_or(folded.as_str(), |(stem, _)| stem);
+            let folded = candidate.folded(whole.case());
+            let stem = folded.rsplit_once('.').map_or(&*folded, |(stem, _)| stem);
             if folded == whole.folded() || stem == whole.folded() {
                 return MatchRank::Exact;
             }
@@ -217,9 +242,9 @@ impl Matcher {
         let Some(first) = texts.next() else {
             return MatchRank::Contains;
         };
-        if starts_with_needle(name, first) {
+        if candidate.folded(first.case()).starts_with(first.folded()) {
             MatchRank::NamePrefix
-        } else if starts_a_word(name, first) && texts.all(|needle| starts_a_word(name, needle)) {
+        } else if starts_a_word(candidate, first) && texts.all(|needle| starts_a_word(candidate, needle)) {
             MatchRank::WordPrefix
         } else {
             MatchRank::Contains
@@ -235,7 +260,7 @@ impl Matcher {
             kind_rank,
             match_rank,
             fuzzy: Reverse(fuzzy),
-            depth: candidate.path.matches(['/', '\\']).count(),
+            depth: candidate.depth,
             name_length: candidate.name.chars().count(),
         }
     }
@@ -252,55 +277,140 @@ pub struct Ranked<'a> {
     pub is_fuzzy: bool,
 }
 
-fn keep_best(found: &mut Vec<(Score, Candidate<'_>)>, limit: usize) {
-    let order = |a: &(Score, Candidate<'_>), b: &(Score, Candidate<'_>)| -> Ordering {
-        a.0.cmp(&b.0)
-            .then_with(|| a.1.name.cmp(b.1.name))
-            .then_with(|| a.1.path.cmp(b.1.path))
-    };
-    if limit == 0 {
-        found.clear();
-        return;
-    }
-    if found.len() > limit {
-        found.select_nth_unstable_by(limit - 1, order);
-        found.truncate(limit);
-    }
-    found.sort_unstable_by(order);
+/// Matches of a part of the candidates (see [`Matcher::scan`]).
+#[derive(Debug, Clone)]
+pub struct Partial<'a> {
+    strict: TopK<'a>,
+    fuzzy: TopK<'a>,
 }
 
-fn extension_of(candidate: &Candidate<'_>) -> Option<String> {
+impl<'a> Partial<'a> {
+    fn new(limit: usize) -> Self {
+        Self {
+            strict: TopK::new(limit),
+            fuzzy: TopK::new(limit),
+        }
+    }
+
+    /// Adds the matches of another part.
+    pub fn merge(&mut self, other: Self) {
+        self.strict.merge(other.strict);
+        self.fuzzy.merge(other.fuzzy);
+    }
+
+    /// The best matches: strict ones, or fuzzy ones when nothing matched strictly.
+    #[must_use]
+    pub fn finish(self) -> Ranked<'a> {
+        let is_fuzzy = self.strict.total == 0 && self.fuzzy.total > 0;
+        let found = if is_fuzzy { self.fuzzy } else { self.strict };
+        let total = found.total;
+        let mut entries: Vec<Ordered<'a>> = found.heap.into_vec();
+        entries.sort_unstable();
+        Ranked {
+            entries: entries
+                .into_iter()
+                .map(|Ordered(score, candidate)| (score, candidate))
+                .collect(),
+            total,
+            is_fuzzy,
+        }
+    }
+}
+
+/// The `limit` best matches seen so far, and how many were seen.
+#[derive(Debug, Clone)]
+struct TopK<'a> {
+    limit: usize,
+    /// A max-heap: the worst kept match is on top, ready to be replaced.
+    heap: BinaryHeap<Ordered<'a>>,
+    total: usize,
+}
+
+impl<'a> TopK<'a> {
+    fn new(limit: usize) -> Self {
+        Self {
+            limit,
+            heap: BinaryHeap::with_capacity(limit.min(1024) + 1),
+            total: 0,
+        }
+    }
+
+    fn push(&mut self, score: Score, candidate: Candidate<'a>) {
+        self.total += 1;
+        self.offer(Ordered(score, candidate));
+    }
+
+    fn offer(&mut self, item: Ordered<'a>) {
+        if self.heap.len() < self.limit {
+            self.heap.push(item);
+        } else if let Some(mut worst) = self.heap.peek_mut()
+            && item < *worst
+        {
+            *worst = item;
+        }
+    }
+
+    fn merge(&mut self, other: Self) {
+        self.total += other.total;
+        for item in other.heap {
+            self.offer(item);
+        }
+    }
+}
+
+/// A match in ranking order: score, then name, then the caller's id.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Ordered<'a>(Score, Candidate<'a>);
+
+impl Ord for Ordered<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0
+            .cmp(&other.0)
+            .then_with(|| self.1.name.cmp(other.1.name))
+            .then_with(|| self.1.id.cmp(&other.1.id))
+    }
+}
+
+impl PartialOrd for Ordered<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// The extension of a folded name: ".bashrc" has none, "archive.tar.gz" has "gz"; apps have none.
+fn extension_of<'n>(candidate: &Candidate<'_>, folded: &'n str) -> Option<&'n str> {
     if candidate.kind == EntryKind::App {
         return None;
     }
-    // ".bashrc" has no extension, "archive.tar.gz" has "gz".
-    let (stem, extension) = candidate.name.rsplit_once('.')?;
-    (!stem.is_empty() && !extension.is_empty()).then(|| text::fold(extension, CaseMatching::Ignore))
-}
-
-fn starts_with_needle(name: &str, needle: &Needle) -> bool {
-    text::fold(name, needle.case()).starts_with(needle.folded())
+    let (stem, extension) = folded.rsplit_once('.')?;
+    (!stem.is_empty() && !extension.is_empty()).then_some(extension)
 }
 
 /// True when the needle is found at the start of a word of the name: after the start, a
 /// non-alphanumeric character, a lower-to-upper case change, or a letter-digit change.
-fn starts_a_word(name: &str, needle: &Needle) -> bool {
-    let chars: Vec<char> = name.chars().collect();
-    let folded: Vec<char> = chars.iter().map(|&c| text::fold_char(c, needle.case())).collect();
-    let target: Vec<char> = needle.folded().chars().collect();
-    if target.is_empty() || target.len() > folded.len() {
-        return target.is_empty();
+///
+/// Folding maps each character to exactly one character, so the original name (for the word
+/// boundaries) and the folded one (for the comparison) are walked side by side.
+fn starts_a_word(candidate: &Candidate<'_>, needle: &Needle) -> bool {
+    let folded = candidate.folded(needle.case());
+    let target = needle.folded();
+    if target.is_empty() {
+        return true;
     }
-    (0..=folded.len() - target.len())
-        .filter(|&index| is_word_start(&chars, index))
-        .any(|index| folded[index..index + target.len()] == target[..])
+    let mut previous: Option<char> = None;
+    for ((at, _), current) in folded.char_indices().zip(candidate.name.chars()) {
+        if is_word_start(previous, current) && folded[at..].starts_with(target) {
+            return true;
+        }
+        previous = Some(current);
+    }
+    false
 }
 
-fn is_word_start(chars: &[char], index: usize) -> bool {
-    let Some(previous) = index.checked_sub(1).map(|before| chars[before]) else {
+fn is_word_start(previous: Option<char>, current: char) -> bool {
+    let Some(previous) = previous else {
         return true;
     };
-    let current = chars[index];
     !previous.is_alphanumeric()
         || (previous.is_lowercase() && current.is_uppercase())
         || (previous.is_alphabetic() && current.is_numeric())
@@ -309,17 +419,17 @@ fn is_word_start(chars: &[char], index: usize) -> bool {
 
 impl Word {
     fn new(word: &str) -> Self {
-        if word.contains(['*', '?']) {
+        if is_pattern(word) {
             Self::Pattern(Glob::new(word))
         } else {
             Self::Text(Needle::new(word))
         }
     }
 
-    fn is_in(&self, name: &str) -> bool {
+    fn is_in(&self, candidate: &Candidate<'_>) -> bool {
         match self {
-            Self::Text(needle) => needle.is_in(name),
-            Self::Pattern(glob) => glob.matches(name),
+            Self::Text(needle) => candidate.folded(needle.case()).contains(needle.folded()),
+            Self::Pattern(glob) => glob.matches_folded(&candidate.folded(glob.case)),
         }
     }
 }
@@ -330,35 +440,58 @@ struct Glob {
     case: CaseMatching,
 }
 
+/// True when a word is a pattern: it has `*` or `?`, starts with `^` or ends with `$`.
+fn is_pattern(word: &str) -> bool {
+    word.contains(['*', '?']) || (word.len() > 1 && (word.starts_with('^') || word.ends_with('$')))
+}
+
 impl Glob {
+    /// A pattern found anywhere in the name; `^` anchors it at the start, `$` at the end.
     fn new(pattern: &str) -> Self {
         let case = CaseMatching::smart(pattern);
-        Self {
-            pattern: text::fold(pattern, case).chars().collect(),
-            case,
+        let (anchored_start, rest) = pattern
+            .strip_prefix('^')
+            .map_or((false, pattern), |rest| (true, rest));
+        let (anchored_end, body) = rest.strip_suffix('$').map_or((false, rest), |body| (true, body));
+        let mut chars = Vec::with_capacity(body.len() + 2);
+        if !anchored_start {
+            chars.push('*');
         }
+        chars.extend(text::fold(body, case).chars());
+        if !anchored_end {
+            chars.push('*');
+        }
+        Self { pattern: chars, case }
     }
 
-    /// Classic wildcard matching with backtracking on the last `*`: linear in practice.
+    /// Folds `name`, then matches it (for tests).
+    #[cfg(test)]
     fn matches(&self, name: &str) -> bool {
-        let name: Vec<char> = text::fold(name, self.case).chars().collect();
+        self.matches_folded(&text::fold(name, self.case))
+    }
+
+    /// Matches a name already folded with this pattern's case. Classic wildcard matching with
+    /// backtracking on the last `*` (linear in practice), walking the name in place.
+    fn matches_folded(&self, name: &str) -> bool {
         let (mut p, mut n) = (0, 0);
         let mut star: Option<(usize, usize)> = None;
-        while n < name.len() {
+        while let Some(c) = name[n..].chars().next() {
             match self.pattern.get(p) {
                 Some('*') => {
                     star = Some((p, n));
                     p += 1;
                 }
-                Some(&c) if c == '?' || c == name[n] => {
+                Some(&wanted) if wanted == '?' || wanted == c => {
                     p += 1;
-                    n += 1;
+                    n += c.len_utf8();
                 }
                 _ => match star {
                     Some((star_p, star_n)) => {
+                        // Let the last '*' take one more character and try again.
+                        let skipped = name[star_n..].chars().next().map_or(1, char::len_utf8);
                         p = star_p + 1;
-                        n = star_n + 1;
-                        star = Some((star_p, star_n + 1));
+                        n = star_n + skipped;
+                        star = Some((star_p, n));
                     }
                     None => return false,
                 },

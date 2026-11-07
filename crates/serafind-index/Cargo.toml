@@ -9,11 +9,20 @@ authors.workspace = true
 
 [dependencies]
 serafind-core.workspace = true
+ignore.workspace = true
+hashbrown.workspace = true
+notify.workspace = true
+notify-debouncer-full.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true
 proptest.workspace = true
 assert_fs.workspace = true
+divan.workspace = true
+
+[[bench]]
+name = "index"
+harness = false
 
 [lints]
 workspace = true
