@@ -427,7 +427,10 @@ impl Daemon {
         Status {
             with_session: self.with_session.lock().expect("startup lock").unwrap_or(false),
             tray_enabled: tray.enabled,
-            tray_problem: tray.problem.clone(),
+            tray_problem: tray
+                .problem
+                .clone()
+                .or_else(|| tray.icon.as_ref().and_then(Tray::problem)),
             pid: std::process::id(),
             version: env!("CARGO_PKG_VERSION").to_owned(),
             protocol: PROTOCOL_VERSION,
