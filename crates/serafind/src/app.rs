@@ -117,7 +117,44 @@ pub struct App {
     placed: bool,
     was_focused: bool,
     size: egui::Vec2,
+    resize: Resize,
     ime: ImeFilter,
+}
+
+/// Asks the window for the bar's size until it has it: the very first request can be dropped
+/// by a Wayland compositor (it comes before the window is set up), and nothing would ask again
+/// until the size changes.
+#[derive(Debug, Default)]
+struct Resize {
+    wanted: egui::Vec2,
+    asked_at: Option<std::time::Instant>,
+    attempts: u8,
+}
+
+impl Resize {
+    const RETRY_AFTER: Duration = Duration::from_millis(100);
+    const MAX_ATTEMPTS: u8 = 20;
+
+    /// The size to ask for now, if any: a new size, or the same one again while the window
+    /// has not taken it (a few times at most, in case the desktop refuses).
+    fn request(&mut self, wanted: egui::Vec2, actual: egui::Vec2) -> Option<egui::Vec2> {
+        let close = |a: egui::Vec2, b: egui::Vec2| (a - b).length() <= 1.0;
+        if !close(wanted, self.wanted) {
+            *self = Self {
+                wanted,
+                asked_at: Some(std::time::Instant::now()),
+                attempts: 1,
+            };
+            return Some(wanted);
+        }
+        let had_time = self.asked_at.is_none_or(|at| at.elapsed() >= Self::RETRY_AFTER);
+        if close(wanted, actual) || !had_time || self.attempts >= Self::MAX_ATTEMPTS {
+            return None;
+        }
+        self.asked_at = Some(std::time::Instant::now());
+        self.attempts += 1;
+        Some(wanted)
+    }
 }
 
 impl App {
@@ -162,6 +199,7 @@ impl App {
             placed: false,
             was_focused: false,
             size: egui::Vec2::ZERO,
+            resize: Resize::default(),
             ime: ImeFilter::default(),
         };
         app.update_problems();
@@ -309,9 +347,13 @@ impl eframe::App for App {
 
         let width = f32::from(self.bar.settings().config.bar.width) + 2.0 * f32::from(margin);
         let size = egui::vec2(width, content.height().ceil());
-        if (size - self.size).length() > 0.5 {
-            self.size = size;
+        self.size = size;
+        if let Some(size) = self.resize.request(size, ctx.content_rect().size()) {
             ctx.send_viewport_cmd(ViewportCommand::InnerSize(size));
+        }
+        if self.resize.attempts < Resize::MAX_ATTEMPTS && (ctx.content_rect().size() - size).length() > 1.0 {
+            // Check again shortly whether the window took the size.
+            ctx.request_repaint_after(Resize::RETRY_AFTER);
         }
 
         for request in self.bar.take_requests() {
@@ -423,6 +465,45 @@ mod tests {
         let mut events = vec![preedit("^"), preedit("")];
         filter.filter(&mut events);
         assert_eq!(events.len(), 2, "an empty one cancelling a composition is kept");
+    }
+
+    /// A moment long enough ago for the resize to be asked again.
+    fn a_while_ago() -> Option<std::time::Instant> {
+        std::time::Instant::now().checked_sub(Resize::RETRY_AFTER)
+    }
+
+    #[test]
+    fn resizing_is_asked_again_until_the_window_takes_it() {
+        let mut resize = Resize::default();
+        let wanted = egui::vec2(708.0, 120.0);
+        let small = egui::vec2(708.0, 80.0);
+        assert_eq!(
+            resize.request(wanted, small),
+            Some(wanted),
+            "a new size is asked at once"
+        );
+        assert_eq!(resize.request(wanted, small), None, "not again right away");
+        resize.asked_at = a_while_ago();
+        assert_eq!(
+            resize.request(wanted, small),
+            Some(wanted),
+            "again once the window had time"
+        );
+        resize.asked_at = a_while_ago();
+        assert_eq!(resize.request(wanted, wanted), None, "not when the window has it");
+        resize.attempts = Resize::MAX_ATTEMPTS;
+        resize.asked_at = a_while_ago();
+        assert_eq!(
+            resize.request(wanted, small),
+            None,
+            "gives up when the desktop refuses"
+        );
+        let other = egui::vec2(708.0, 300.0);
+        assert_eq!(
+            resize.request(other, small),
+            Some(other),
+            "a new size starts over"
+        );
     }
 
     #[test]
