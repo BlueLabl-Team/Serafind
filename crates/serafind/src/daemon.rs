@@ -50,6 +50,7 @@ pub fn run(settings_dir: Option<PathBuf>, home: PathBuf) -> io::Result<()> {
         index: Arc::new(RwLock::new(None)),
         live_index: Mutex::new(None),
         index_settings: Mutex::new(settings.config.index.clone()),
+        terminal: Mutex::new(settings.config.actions.terminal.clone()),
         bar: Mutex::new(BarState::default()),
         quitting: AtomicBool::new(false),
         shortcut: Mutex::new(None),
@@ -85,6 +86,8 @@ struct Daemon {
     /// Keeps the watcher of the index alive.
     live_index: Mutex<Option<LiveIndex>>,
     index_settings: Mutex<IndexSettings>,
+    /// `[actions] terminal`.
+    terminal: Mutex<String>,
     bar: Mutex<BarState>,
     quitting: AtomicBool,
     /// The global shortcut; replaced when `[shortcut]` changes.
@@ -184,6 +187,25 @@ impl Daemon {
             Request::BarVisible { visible } => {
                 self.bar.lock().expect("bar lock").visible = visible;
                 Response::Ok
+            }
+            Request::Act {
+                action,
+                path,
+                activation_token,
+            } => {
+                let terminal = self.terminal.lock().expect("terminal lock").clone();
+                match crate::actions::perform(
+                    action,
+                    Path::new(&path),
+                    &terminal,
+                    activation_token.as_deref(),
+                ) {
+                    Ok(()) => Response::Ok,
+                    Err(message) => {
+                        eprintln!("serafind: {message}");
+                        Response::Error { message }
+                    }
+                }
             }
             Request::Subscribe => {
                 let mut bar = self.bar.lock().expect("bar lock");
@@ -433,6 +455,11 @@ impl Daemon {
                 eprintln!("serafind: indexed folders changed, indexing again");
                 daemon.start_index(&settings.config.index);
             }
+            settings
+                .config
+                .actions
+                .terminal
+                .clone_into(&mut daemon.terminal.lock().expect("terminal lock"));
             daemon.start_shortcut(&settings.config.shortcut);
             daemon.start_tray(settings.config.tray.enabled);
         })

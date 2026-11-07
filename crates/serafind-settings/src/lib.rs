@@ -18,11 +18,11 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 pub use config::{
-    Appearance, Backend, BarSettings, Behavior, Chips, Config, Escape, IconSet, IndexSettings, Layout,
-    ModeSelector, Rows, Screen, Shortcut, Tray, Window,
+    Actions, Appearance, Backend, BarKeys, BarSettings, Behavior, Chips, Click, Config, Escape, IconSet,
+    IndexSettings, Layout, ModeSelector, Rows, Screen, Shortcut, Tray, Window,
 };
 pub use error::SettingsError;
-pub use keys::{Key, Keys};
+pub use keys::{Key, Keys, Modifiers};
 pub use theme::{BUILT_IN, Color, Colors, Font, IconColors, Icons, Shape, Theme, ThemeMode};
 pub use watch::SettingsWatcher;
 

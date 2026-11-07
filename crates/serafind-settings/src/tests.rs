@@ -97,6 +97,10 @@ fn appearance_overrides_the_theme() {
 #[case("[window]\ntop = 2.0\n", 2, "window.top")]
 #[case("[shortcut]\ntoggle = \"Super+Banana\"\n", 2, "unknown key")]
 #[case("[shortcut]\ntoggle = \"F\"\n", 2, "normal typing")]
+#[case("[keys]\nopen = \"Enter\"\ncopy_name = \"N\"\n", 3, "type in the search")]
+#[case("[keys]\nmode_with_digit = \"Super\"\n", 2, "cannot use Super")]
+#[case("[behavior]\nclick = \"triple\"\n", 2, "triple")]
+#[case("[actions]\nterminal = \" \"\n", 2, "actions.terminal")]
 fn problems_are_errors_with_their_line(#[case] config: &str, #[case] line: usize, #[case] mentions: &str) {
     let dir = folder_with(config);
     let error = load(dir.path(), SystemMode::Dark).unwrap_err();
