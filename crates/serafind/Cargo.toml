@@ -16,6 +16,7 @@ serde.workspace = true
 serde_json.workspace = true
 dirs.workspace = true
 eframe.workspace = true
+png.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 winit.workspace = true
@@ -23,10 +24,12 @@ ashpd.workspace = true
 futures-lite.workspace = true
 global-hotkey.workspace = true
 async-io.workspace = true
+ksni.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 global-hotkey.workspace = true
 windows-sys.workspace = true
+tray-icon.workspace = true
 
 [dev-dependencies]
 serafind-ipc.workspace = true

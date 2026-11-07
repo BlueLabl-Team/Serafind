@@ -16,6 +16,7 @@ use serafind_settings::{IndexSettings, Settings, SettingsWatcher, SystemMode};
 
 use crate::search::{SharedIndex, from_wire_mode, search_index, understand};
 use crate::shortcut::{Shortcut, ShortcutState};
+use crate::tray::{Action, Tray};
 
 /// How long a bar process may take to connect before another one may be started.
 const BAR_START_TIMEOUT: Duration = Duration::from_secs(5);
@@ -35,8 +36,11 @@ pub fn run(settings_dir: Option<PathBuf>, home: PathBuf) -> io::Result<()> {
     eprintln!("serafind: listening at {}", listener.location());
 
     match crate::desktop::install_desktop_file() {
-        Ok(Some(path)) => eprintln!("serafind: desktop entry written: {}", path.display()),
-        Ok(None) => {}
+        Ok(written) => {
+            for path in written {
+                eprintln!("serafind: written: {}", path.display());
+            }
+        }
         Err(error) => eprintln!("serafind: cannot write the desktop entry: {error}"),
     }
     let settings = load_settings(settings_dir.as_deref());
@@ -51,9 +55,11 @@ pub fn run(settings_dir: Option<PathBuf>, home: PathBuf) -> io::Result<()> {
         shortcut: Mutex::new(None),
         shortcut_keys: Mutex::new(String::new()),
         shortcut_state: Arc::new(Mutex::new(ShortcutState::default())),
+        tray: Mutex::new(TrayState::default()),
     });
     daemon.start_index(&settings.config.index);
     daemon.start_shortcut(&settings.config.shortcut);
+    daemon.start_tray(settings.config.tray.enabled);
     let _watcher = daemon.watch_settings();
 
     while !daemon.quitting.load(Ordering::Acquire) {
@@ -67,6 +73,7 @@ pub fn run(settings_dir: Option<PathBuf>, home: PathBuf) -> io::Result<()> {
     }
     daemon.bar.lock().expect("bar lock").send(&Event::Quit);
     drop(daemon.shortcut.lock().expect("shortcut lock").take());
+    drop(daemon.tray.lock().expect("tray lock").icon.take());
     eprintln!("serafind: stopped");
     Ok(())
 }
@@ -84,6 +91,15 @@ struct Daemon {
     shortcut: Mutex<Option<Shortcut>>,
     shortcut_keys: Mutex<String>,
     shortcut_state: Arc<Mutex<ShortcutState>>,
+    /// The notification area icon; started or removed when `[tray] enabled` changes.
+    tray: Mutex<TrayState>,
+}
+
+#[derive(Default)]
+struct TrayState {
+    enabled: bool,
+    icon: Option<Tray>,
+    problem: Option<String>,
 }
 
 /// What the resident process knows of the bar process.
@@ -235,6 +251,59 @@ impl Daemon {
         ));
     }
 
+    /// Shows or removes the notification area icon.
+    fn start_tray(self: &Arc<Self>, enabled: bool) {
+        let mut tray = self.tray.lock().expect("tray lock");
+        if tray.enabled == enabled {
+            return;
+        }
+        tray.enabled = enabled;
+        tray.problem = None;
+        if !enabled {
+            drop(tray.icon.take());
+            return;
+        }
+        let daemon = Arc::downgrade(self);
+        let on_action: crate::tray::OnAction = Arc::new(move |action, token| {
+            if let Some(daemon) = daemon.upgrade() {
+                daemon.act(action, token);
+            }
+        });
+        match crate::tray::start(on_action) {
+            Ok(icon) => tray.icon = Some(icon),
+            Err(problem) => {
+                eprintln!("serafind: notification area icon: {problem}");
+                tray.problem = Some(problem);
+            }
+        }
+    }
+
+    /// Does what was chosen in the notification area icon.
+    fn act(self: &Arc<Self>, action: Action, activation_token: Option<String>) {
+        match action {
+            Action::Toggle => self.toggle(activation_token),
+            Action::Show => self.show(activation_token),
+            Action::Reindex => {
+                let settings = self.index_settings.lock().expect("index settings lock").clone();
+                eprintln!("serafind: indexing again");
+                self.start_index(&settings);
+            }
+            Action::OpenSettings => match &self.settings_dir {
+                Some(dir) => {
+                    if let Err(error) = crate::desktop::open(dir, activation_token.as_deref()) {
+                        eprintln!("serafind: cannot open {}: {error}", dir.display());
+                    }
+                }
+                None => eprintln!("serafind: no settings folder"),
+            },
+            Action::Quit => {
+                self.quitting.store(true, Ordering::Release);
+                // Wake the accept loop up so that it sees the flag.
+                let _ = Client::connect();
+            }
+        }
+    }
+
     fn show(&self, activation_token: Option<String>) {
         let mut bar = self.bar.lock().expect("bar lock");
         if bar.link.is_some() {
@@ -289,7 +358,10 @@ impl Daemon {
             .lock()
             .map(|state| state.clone())
             .unwrap_or_default();
+        let tray = self.tray.lock().expect("tray lock");
         Status {
+            tray_enabled: tray.enabled,
+            tray_problem: tray.problem.clone(),
             pid: std::process::id(),
             version: env!("CARGO_PKG_VERSION").to_owned(),
             protocol: PROTOCOL_VERSION,
@@ -362,6 +434,7 @@ impl Daemon {
                 daemon.start_index(&settings.config.index);
             }
             daemon.start_shortcut(&settings.config.shortcut);
+            daemon.start_tray(settings.config.tray.enabled);
         })
         .ok()
     }
