@@ -11,8 +11,15 @@ use super::*;
 const DELAY: Duration = Duration::from_millis(50);
 const PATIENCE: Duration = Duration::from_secs(5);
 
+/// Starts watching `root` and waits until the watches are set up.
 fn start(root: &TempDir) -> LiveIndex {
-    LiveIndex::start(vec![root.to_path_buf()], Exclusions::defaults(root.path()), DELAY).unwrap()
+    let live = LiveIndex::start(vec![root.to_path_buf()], Exclusions::defaults(root.path()), DELAY).unwrap();
+    let started = Instant::now();
+    while !live.status().ready {
+        assert!(started.elapsed() < PATIENCE, "the watches were never set up");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    live
 }
 
 /// Waits until `condition` holds on the index, or fails after a few seconds.

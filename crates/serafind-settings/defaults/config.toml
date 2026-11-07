@@ -55,6 +55,9 @@ hide_on_focus_loss = true
 keep_last_query = false
 # Escape key: "close", or "clear-then-close" (a first Escape clears the search).
 escape = "close"
+# Keep the bar hidden between openings: it opens instantly but stays in memory. Set to false to
+# close it and free the memory. On Wayland a window cannot be hidden: the bar is always closed.
+keep_window = true
 
 [index]
 # Folders indexed. "~" is the home folder.

@@ -46,9 +46,25 @@ invoice ext:pdf,docx in:~/Documents type:file -draft "exact phrase" rep*rt
 | Ctrl+Enter | Show in the file manager |
 | Ctrl+C | Copy the path |
 
+## Usage
+
+```sh
+serafind            # start Serafind in the background (or open / close the bar if it runs)
+serafind toggle     # open the bar, or close it
+serafind show       # open the bar
+serafind hide       # close the bar
+serafind status     # is it running? how big is the index?
+serafind quit       # stop Serafind
+serafind daemon     # run in this terminal, to see its messages
+```
+
+Messages of the background process go to `~/.local/state/serafind/serafind.log` (Linux) or the local application data folder (Windows).
+
 ## How it works
 
-- A small resident process keeps an **in-memory index** of the home directory, minus excluded folders (`.git`, `node_modules`, `target`, caches, hidden folders). The index is built by a parallel walk at start and kept up to date by watching the filesystem. The indexed folders and exclusions can be configured.
+- **Two processes.** A small resident process (a few MB, no window) keeps the index, listens for the shortcut and answers on a local socket. The bar is a separate process, started on demand, that searches through that socket. Between openings the bar is hidden and kept (instant), or closed to free its memory (`[behavior] keep_window`). On Wayland, a window cannot be hidden, so the bar is always closed and started again (about 50 ms).
+- **Local protocol.** JSON messages, one per line, on a Unix socket in the user's private runtime folder (Linux) or a named pipe (Windows). Third-party tools can use it, for example `{"type":"search","line":"invoice ext:pdf","mode":"all","max":10}`.
+- The resident process keeps an **in-memory index** of the home directory, minus excluded folders (`.git`, `node_modules`, `target`, caches, hidden folders). The index is built by a parallel walk at start and kept up to date by watching the filesystem. The indexed folders and exclusions can be configured.
 - **Content** search runs on demand, like ripgrep: the index narrows down the candidate files, then they are read in parallel.
 - The **global shortcut** is registered directly on Windows and X11, and through the XDG `GlobalShortcuts` portal on Wayland (GNOME, KDE). On other compositors, bind `serafind toggle` to a shortcut in the compositor settings.
 
@@ -102,8 +118,9 @@ Later: [egui_kittest](https://github.com/emilk/egui/tree/main/crates/egui_kittes
 |---|---|
 | [`crates/serafind-core`](crates/serafind-core) | Search line syntax, modes, matching and ranking. Pure: no disk, no window. |
 | [`crates/serafind-index`](crates/serafind-index) | In-memory index: tree walking, filesystem watching, exclusions. |
+| [`crates/serafind-ipc`](crates/serafind-ipc) | The local protocol: JSON messages over a local socket, client and listener. |
 | [`crates/serafind-settings`](crates/serafind-settings) | `config.toml` and themes: defaults, validation, live reload. No user interface. |
-| [`crates/serafind`](crates/serafind) | The `serafind` executable: search bar, resident process, global shortcut, command line. |
+| [`crates/serafind`](crates/serafind) | The `serafind` executable: command line, resident process, search bar. |
 
 ## Build from source
 
@@ -127,7 +144,7 @@ cargo insta review             # review changed snapshots
 | 2 | `index`: parallel first walk, filesystem watching, exclusions, benchmarks | ✅ |
 | 3 | Settings and themes (TOML, defaults, validation, live reload) | ✅ |
 | 3 | Search bar (egui): input, chips, results, keyboard navigation, `in:` completion | ✅ |
-| 4 | Resident process: single instance, `serafind toggle`, global shortcut (X11, Windows, Wayland portal), tray icon | ⬜ |
+| 4 | Resident process: single instance, `serafind toggle`, global shortcut (X11, Windows, Wayland portal), tray icon | 🚧 |
 | 4b | Choose where the bar appears on Wayland (layer-shell, focus on X11, or another way: to be decided) | ⬜ |
 | 5 | Actions: open, show in the file manager, copy the path | ⬜ |
 | 6 | Apps mode: `.desktop` files (Linux), Start menu shortcuts (Windows) | ⬜ |

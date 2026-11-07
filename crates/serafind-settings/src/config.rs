@@ -148,6 +148,9 @@ pub struct Behavior {
     pub keep_last_query: bool,
     /// What Escape does.
     pub escape: Escape,
+    /// Keep the bar's window hidden between openings (instant, more memory) instead of closing
+    /// it. Not possible on Wayland, where the window is always closed.
+    pub keep_window: bool,
 }
 
 /// What the Escape key does.
@@ -262,6 +265,7 @@ impl Default for Behavior {
             hide_on_focus_loss: true,
             keep_last_query: false,
             escape: Escape::Close,
+            keep_window: true,
         }
     }
 }

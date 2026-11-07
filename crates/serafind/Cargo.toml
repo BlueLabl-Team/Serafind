@@ -11,6 +11,9 @@ authors.workspace = true
 serafind-core.workspace = true
 serafind-index.workspace = true
 serafind-settings.workspace = true
+serafind-ipc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 dirs.workspace = true
 eframe.workspace = true
 
@@ -18,6 +21,7 @@ eframe.workspace = true
 winit.workspace = true
 
 [dev-dependencies]
+serafind-ipc.workspace = true
 egui_kittest.workspace = true
 assert_fs.workspace = true
 rstest.workspace = true

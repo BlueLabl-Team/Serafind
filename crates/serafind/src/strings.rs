@@ -22,6 +22,8 @@ pub struct Strings {
     pub fuzzy_note: &'static str,
     /// `in:` names a folder outside the index.
     pub outside_index: &'static str,
+    /// The resident process does not answer.
+    pub unreachable: &'static str,
     /// The path was copied.
     pub path_copied: &'static str,
     /// Opening is not available yet.
@@ -60,6 +62,7 @@ impl Strings {
         no_result: "No result",
         fuzzy_note: "approximate",
         outside_index: "This folder is not indexed",
+        unreachable: "Serafind is not running",
         path_copied: "Path copied",
         action_not_ready: "Opening comes in a later version",
         settings_error: "Settings not applied",

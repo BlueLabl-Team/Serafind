@@ -1,0 +1,24 @@
+---
+source: crates/serafind-ipc/src/message.rs
+expression: "serde_json::to_string_pretty(&results).unwrap()"
+---
+{
+  "type": "results",
+  "mode": "files",
+  "rows": [
+    {
+      "name": "facture.pdf",
+      "path": "/home/me/facture.pdf",
+      "location": "~",
+      "kind": "file",
+      "highlights": [
+        0,
+        1
+      ]
+    }
+  ],
+  "total": 1,
+  "fuzzy": false,
+  "outside_index": false,
+  "indexing": false
+}
