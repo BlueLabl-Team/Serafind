@@ -94,7 +94,9 @@ mod backend {
 
     mod portal {
         use ashpd::desktop::CreateSessionOptions;
-        use ashpd::desktop::global_shortcuts::{BindShortcutsOptions, GlobalShortcuts, NewShortcut};
+        use ashpd::desktop::global_shortcuts::{
+            BindShortcutsOptions, GlobalShortcuts, ListShortcutsOptions, NewShortcut, Shortcut,
+        };
         use futures_lite::{FutureExt, StreamExt};
 
         use super::{
@@ -127,17 +129,37 @@ mod backend {
                 let wanted = keys.to_xdg();
                 let shortcut = NewShortcut::new(SHORTCUT_ID, "Open or close the Serafind search bar")
                     .preferred_trigger(wanted.as_str());
+                let find = |shortcuts: &[Shortcut]| {
+                    shortcuts
+                        .iter()
+                        .find(|shortcut| shortcut.id() == SHORTCUT_ID)
+                        .map(|shortcut| shortcut.trigger_description().to_owned())
+                };
                 let bound = portal
                     .bind_shortcuts(&session, &[shortcut], None, BindShortcutsOptions::default())
                     .await
-                    .and_then(|request| request.response())
-                    .map_err(|error| format!("the shortcut was not accepted ({error}): choose another one, or {BIND_IT_YOURSELF}"))?;
-                let active = bound
-                    .shortcuts()
-                    .iter()
-                    .find(|shortcut| shortcut.id() == SHORTCUT_ID)
-                    .map(|shortcut| shortcut.trigger_description().to_owned())
-                    .filter(|description| !description.is_empty());
+                    .and_then(|request| request.response());
+                let active = match bound {
+                    Ok(bound) => find(bound.shortcuts()),
+                    // GNOME 48 answers "failed" when the shortcut was already accepted earlier,
+                    // yet binds it: ask what the session holds before giving up.
+                    Err(error) => {
+                        let listed = portal
+                            .list_shortcuts(&session, ListShortcutsOptions::default())
+                            .await
+                            .and_then(|request| request.response())
+                            .ok()
+                            .and_then(|listed| find(listed.shortcuts()));
+                        if listed.is_none() {
+                            let _ = session.close().await;
+                            return Err(format!(
+                                "the shortcut was not accepted ({error}): choose another one, or {BIND_IT_YOURSELF}"
+                            ));
+                        }
+                        listed
+                    }
+                }
+                .filter(|description| !description.is_empty());
                 if let Ok(mut state) = state.lock() {
                     state.problem = active
                         .is_none()

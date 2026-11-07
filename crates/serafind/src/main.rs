@@ -285,7 +285,9 @@ fn start_in_background(settings_dir: Option<&Path>, show: bool) -> ExitCode {
             },
         );
     }
-    println!("Serafind started. Open the bar with `serafind toggle` (the global shortcut comes soon).");
+    println!(
+        "Serafind started. Open the bar with the global shortcut (see `serafind status`) or `serafind toggle`."
+    );
     if let Some(path) = log_path {
         println!("Log: {}", path.display());
     }
