@@ -90,6 +90,17 @@ open_at_line = "auto"
 max_file_size = 10
 # The search starts after this pause in typing, in milliseconds.
 typing_delay = 250
+# Files never read, by name (* stands for any characters): shell histories, passwords, keys...
+# so that their lines never appear in the bar (they are still found by their name).
+exclude_names = [
+    ".bash_history", ".zsh_history", ".histfile", ".sh_history", ".python_history",
+    ".node_repl_history", ".psql_history", ".mysql_history", ".sqlite_history", ".rediscli_history",
+    ".lesshst", ".viminfo", ".netrc", ".git-credentials", ".pgpass",
+    ".my.cnf", ".npmrc", ".pypirc", ".Xauthority", ".ICEauthority",
+    ".env", ".env.*", "*.pem", "*.key", "*.p12",
+    "*.pfx", "*.kdbx", "id_rsa", "id_dsa", "id_ecdsa",
+    "id_ed25519",
+]
 
 [keys]
 # Keys of the bar: modifiers (Ctrl, Alt, Shift) and a key, joined with "+". Keys: a letter, a digit,

@@ -497,6 +497,14 @@ impl Daemon {
                 };
             };
             let settings = self.content.lock().expect("content settings lock").clone();
+            // Histories, passwords and keys are never read: their lines would show in the bar.
+            let files: Vec<PathBuf> = files
+                .into_iter()
+                .filter(|file| {
+                    file.file_name()
+                        .is_none_or(|name| !settings.excludes(&name.to_string_lossy()))
+                })
+                .collect();
             let max_size = u64::from(settings.max_file_size) * 1024 * 1024;
             let search = Arc::new(ContentSearch::start(files, content_query, max_size, max));
             self.content_searches

@@ -54,7 +54,7 @@ impl Usage {
             std::fs::create_dir_all(folder)?;
         }
         let text = serde_json::to_string_pretty(&self.launches).map_err(std::io::Error::other)?;
-        std::fs::write(file, text)
+        crate::private_file::write(file, text)
     }
 }
 

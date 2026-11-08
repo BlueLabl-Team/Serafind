@@ -28,6 +28,11 @@ impl Instance {
             .child("data/Projects/main.rs")
             .write_str("fn main() {\n    // TODO: fix the parser\n}\n")
             .unwrap();
+        // A secret that the Content mode must not read.
+        folder
+            .child("data/.git-credentials")
+            .write_str("https://me:TODO: fix the parser@example.com\n")
+            .unwrap();
         let settings = folder.path().join("settings");
         std::fs::create_dir_all(&settings).unwrap();
         let data = folder.path().join("data");
