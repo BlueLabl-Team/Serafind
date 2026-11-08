@@ -573,8 +573,13 @@ mod tests {
             names(&found(&paths, "firefox ext:txt", SearchMode::All, None)),
             ["firefox-notes.txt"]
         );
-        // `in:` searches a folder: no applications there.
-        let outside = found(&paths, "firefox in:/tmp", SearchMode::All, None);
+        // `in:` searches a folder (one that exists on every system): no applications there.
+        let folder = std::env::temp_dir();
+        let line = format!(
+            "firefox in:\"{}\"",
+            folder.display().to_string().trim_end_matches(['/', '\\'])
+        );
+        let outside = found(&paths, &line, SearchMode::All, None);
         assert!(names(&outside).is_empty());
         assert!(outside.outside_index);
     }
