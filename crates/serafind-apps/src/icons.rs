@@ -242,7 +242,7 @@ mod tests {
                 path.strip_prefix(base.path())
                     .unwrap()
                     .to_string_lossy()
-                    .into_owned()
+                    .replace('\\', "/")
             })
         };
         assert_eq!(found("tiny").as_deref(), Some("Mine/16x16/apps/tiny.png"));
