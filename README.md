@@ -160,7 +160,7 @@ A winged magnifying glass: Serafind is *seraphim* + *find*. The current logo is 
 
 | | |
 |---|---|
-| [Rust](https://www.rust-lang.org/) (edition 2024, latest stable) | Language |
+| [Rust](https://www.rust-lang.org/) (edition 2024; version fixed in `rust-toolchain.toml`) | Language |
 | [egui](https://github.com/emilk/egui) | User interface |
 | [ignore](https://github.com/BurntSushi/ripgrep/tree/master/crates/ignore) | Parallel tree walking |
 | [notify](https://github.com/notify-rs/notify) | Filesystem watching (index, settings) |
@@ -191,7 +191,7 @@ Later: [egui_kittest](https://github.com/emilk/egui/tree/main/crates/egui_kittes
 
 ## Build from source
 
-You need Rust (latest stable) and Git.
+You need [rustup](https://rustup.rs/) and Git: rustup installs the Rust version of `rust-toolchain.toml` (1.99.1) on its own, the same as the CI's. To check the Windows code from Linux: `rustup target add x86_64-pc-windows-msvc`, then `cargo clippy --target x86_64-pc-windows-msvc --workspace --all-targets`.
 
 ```bash
 git clone git@github.com:BlueLabl-Team/Serafind.git

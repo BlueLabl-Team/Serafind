@@ -3,6 +3,7 @@ name = "serafind"
 description = "Serafind: a quick search bar opened by a global shortcut."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
