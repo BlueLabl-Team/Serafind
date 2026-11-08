@@ -1,7 +1,8 @@
 //! Says when `config.toml` or a theme changes, so the settings can be read again.
 
-use std::path::Path;
-use std::time::Duration;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{Duration, SystemTime};
 
 use notify::{RecommendedWatcher, RecursiveMode};
 use notify_debouncer_full::{DebounceEventResult, Debouncer, RecommendedCache, new_debouncer};
@@ -19,6 +20,8 @@ impl SettingsWatcher {
     /// # Errors
     /// When `dir` cannot be watched (it must exist).
     pub fn start(dir: &Path, delay: Duration, on_change: impl Fn() + Send + 'static) -> notify::Result<Self> {
+        let folder = dir.to_path_buf();
+        let known = Mutex::new(fingerprint(&folder));
         let mut debouncer = new_debouncer(delay, None, move |result: DebounceEventResult| {
             let Ok(events) = result else {
                 return;
@@ -30,7 +33,18 @@ impl SettingsWatcher {
                 .filter(|event| !matches!(event.kind, notify::EventKind::Access(_)))
                 .flat_map(|event| event.paths.iter())
                 .any(|path| is_settings_file(path));
-            if touches_settings {
+            if !touches_settings {
+                return;
+            }
+            // Only a real change counts: some systems report a read as a change of the file
+            // (its access time), which would also load the settings again, forever.
+            let now = fingerprint(&folder);
+            let changed = known.lock().is_ok_and(|mut known| {
+                let changed = *known != now;
+                *known = now;
+                changed
+            });
+            if changed {
                 on_change();
             }
         })
@@ -41,6 +55,30 @@ impl SettingsWatcher {
             _debouncer: debouncer,
         })
     }
+}
+
+/// The settings files with their modification time and size, sorted: what tells a real change.
+fn fingerprint(dir: &Path) -> Vec<(PathBuf, Option<SystemTime>, u64)> {
+    let mut files = Vec::new();
+    for folder in [dir.to_path_buf(), dir.join(crate::THEMES_DIR)] {
+        let Ok(entries) = std::fs::read_dir(&folder) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_none_or(|extension| extension != "toml") {
+                continue;
+            }
+            let metadata = entry.metadata().ok();
+            files.push((
+                path,
+                metadata.as_ref().and_then(|metadata| metadata.modified().ok()),
+                metadata.map_or(0, |metadata| metadata.len()),
+            ));
+        }
+    }
+    files.sort();
+    files
 }
 
 fn is_settings_file(path: &Path) -> bool {
