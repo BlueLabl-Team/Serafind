@@ -2,9 +2,9 @@
 
 *A BlueLabl project*
 
-Serafind is a quick search bar for Linux and Windows. Press a global shortcut anywhere, type, and open what you were looking for: an application, a folder, a file, or text inside a file. It brings the quick search of [PowerHive](https://github.com/BlueLabl-Team/PowerHive) to the whole desktop, as a single small executable.
+Serafind is a quick search bar for Linux and Windows. Press a global shortcut anywhere, type, and open what you were looking for: an application, a folder, a file, or text inside a file. It is a single small executable.
 
-> **Status:** early development. Nothing is usable yet. See the [roadmap](#roadmap).
+> **Status:** first version (0.1.0): searching files, folders, applications and text works on Linux and Windows. See the [roadmap](#roadmap) for what comes next.
 
 ## Goals
 
@@ -28,7 +28,7 @@ Mode keywords will be defined with the search syntax.
 
 ### Search syntax
 
-The same syntax as PowerHive's quick search, where each part of the line is shown as a chip:
+Each part of the line is understood and shown as a chip:
 
 ```
 invoice ext:pdf,docx in:~/Documents type:file -draft "exact phrase" rep*rt
@@ -130,7 +130,7 @@ Everything is set in one folder: `~/.config/serafind/` on Linux, `%APPDATA%\Sera
 serafind/
 ├── config.toml        bar size and text size, layout, behavior, indexed folders, shortcut, theme choice
 └── themes/
-    ├── dark.toml      built-in themes (PowerHive's Default Dark and Default Light), written as examples
+    ├── dark.toml      built-in themes (Default Dark and Default Light), written as examples
     ├── light.toml
     └── my-theme.toml  your own: extends = "dark", then only what changes
 ```
@@ -139,7 +139,7 @@ serafind/
 - Every key is optional: a missing key keeps its default.
 - An unknown key, a wrong value or a syntax error makes the file be refused. The previous settings stay, and the error is shown in the bar with its file and line.
 - Every dimension of the bar (width, padding, row height, text size, number of results) is in `[bar]` of `config.toml`; themes only hold the look (colors, font, corners, shadow, icons).
-- Themes use the same color roles as PowerHive (`primary`, `accent`, `surface_elevated`, `text_secondary`…), so both applications look alike.
+- Themes are made of color roles (`primary`, `accent`, `surface_elevated`, `text_secondary`…).
 - `theme = "system"` follows the dark or light mode of the desktop. Font and icons come from the theme, and `[appearance]` in `config.toml` can override them.
 - The global shortcut is `Super+F` by default (`[shortcut] toggle`), with an optional per-system value.
 
@@ -211,6 +211,8 @@ cargo insta review             # review changed snapshots
   - `serafind-X.Y.Z-windows-x86_64.zip` and `serafind-X.Y.Z-windows-x86_64-setup.exe` (installs for the current user, no administrator rights);
   - `SHA256SUMS.txt`.
 
+  Every archive and package also holds `THIRD_PARTY_LICENSES.html` (the licenses of the crates built in, made by [cargo-about](https://github.com/EmbarkStudios/cargo-about)) and the licenses of the embedded fonts.
+
 ```bash
 git switch main && git pull
 git tag v0.1.0 && git push origin v0.1.0
@@ -221,7 +223,7 @@ git tag v0.1.0 && git push origin v0.1.0
 | # | Step | Status |
 |---|---|---|
 | 0 | Workspace, test tooling, roadmap | ✅ |
-| 1 | `core`: search syntax (PowerHive grammar + mode keywords), matching, ranking (fuzzy / prefix) | ✅ |
+| 1 | `core`: search syntax (filters + mode keywords), matching, ranking (fuzzy / prefix) | ✅ |
 | 2 | `index`: parallel first walk, filesystem watching, exclusions, benchmarks | ✅ |
 | 3 | Settings and themes (TOML, defaults, validation, live reload) | ✅ |
 | 3 | Search bar (egui): input, chips, results, keyboard navigation, `in:` completion | ✅ |
@@ -240,6 +242,10 @@ git tag v0.1.0 && git push origin v0.1.0
 ## Known issues
 
 - **GNOME 48 says the shortcut failed when it worked.** When an application asks again for a shortcut it already holds, `xdg-desktop-portal-gnome` 48 binds it but answers `BindShortcuts` with a failure. Serafind then asks the portal which shortcuts it really holds (`ListShortcuts`) before reporting a problem. If `serafind status` shows an error while the key works, the workaround did not apply: please open an issue with the output of `serafind status`.
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Security problems are reported privately: see [SECURITY.md](SECURITY.md).
 
 ## License
 
