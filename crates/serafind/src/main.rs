@@ -20,6 +20,7 @@ mod format;
 mod icons;
 mod logo;
 mod priority;
+mod private_file;
 mod search;
 mod shortcut;
 mod strings;
@@ -295,10 +296,7 @@ fn start_in_background(settings_dir: Option<&Path>, show: bool) -> ExitCode {
         command
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null());
-        match log_path
-            .as_ref()
-            .and_then(|path| std::fs::File::create(path).ok())
-        {
+        match log_path.as_ref().and_then(|path| private_file::create(path).ok()) {
             Some(log) => command.stderr(log),
             None => command.stderr(std::process::Stdio::null()),
         };
