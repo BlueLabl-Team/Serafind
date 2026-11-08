@@ -1,6 +1,6 @@
 ; Windows installer of Serafind (Inno Setup 6).
 ; Built by the release workflow:
-;   iscc /DVersion=0.1.0 /DSource=<folder of serafind.exe> /DOutput=<folder> packaging\windows\serafind.iss
+;   iscc /DVersion=X.Y.Z /DSource=<folder of serafind.exe> /DOutput=<folder> packaging\windows\serafind.iss
 ; Installs for the current user only: no administrator rights needed.
 
 #ifndef Version

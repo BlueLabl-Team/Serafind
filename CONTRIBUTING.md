@@ -49,7 +49,7 @@ The Windows code can be checked from Linux:
 
 ```bash
 git switch main && git pull
-git tag v0.1.0 && git push origin v0.1.0
+git tag vX.Y.Z && git push origin vX.Y.Z   # the version of Cargo.toml
 ```
 
 ## Project layout
