@@ -16,6 +16,7 @@
 //! ```
 
 mod message;
+mod peer;
 mod transport;
 
 pub use message::{Action, Event, Kind, Line, Mode, Request, Response, Results, Row, Status};
