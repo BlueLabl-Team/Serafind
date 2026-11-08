@@ -1,0 +1,98 @@
+---
+source: crates/serafind-core/src/syntax/tests.rs
+expression: "parse_line(r#\"invoice ext:pdf,docx in:~/Documents -draft c:\"total due\" a: unknown:x\"#)"
+---
+Query {
+    parts: [
+        Part {
+            kind: Name,
+            text: "invoice",
+            span: 0..7,
+            value: "invoice",
+            excluded: false,
+            error: None,
+        },
+        Part {
+            kind: Extension,
+            text: "ext:pdf,docx",
+            span: 8..20,
+            value: "pdf, docx",
+            excluded: false,
+            error: None,
+        },
+        Part {
+            kind: Folder,
+            text: "in:~/Documents",
+            span: 21..35,
+            value: "~/Documents",
+            excluded: false,
+            error: None,
+        },
+        Part {
+            kind: Name,
+            text: "-draft",
+            span: 36..42,
+            value: "draft",
+            excluded: true,
+            error: None,
+        },
+        Part {
+            kind: Mode(
+                Content,
+            ),
+            text: "c:\"total due\"",
+            span: 43..56,
+            value: "total due",
+            excluded: false,
+            error: Some(
+                ReplacedMode(
+                    Apps,
+                ),
+            ),
+        },
+        Part {
+            kind: Mode(
+                Apps,
+            ),
+            text: "a:",
+            span: 57..59,
+            value: "",
+            excluded: false,
+            error: None,
+        },
+        Part {
+            kind: Name,
+            text: "unknown:x",
+            span: 60..69,
+            value: "unknown:x",
+            excluded: false,
+            error: Some(
+                UnknownFilter(
+                    "unknown",
+                ),
+            ),
+        },
+    ],
+    words: [
+        "invoice",
+        "unknown:x",
+    ],
+    excluded_words: [
+        "draft",
+    ],
+    extensions: [
+        "pdf",
+        "docx",
+    ],
+    excluded_extensions: [],
+    content: [],
+    excluded_content: [],
+    content_patterns: [],
+    excluded_content_patterns: [],
+    mode: Some(
+        Apps,
+    ),
+    start_folder: Some(
+        "/home/me/Documents",
+    ),
+}

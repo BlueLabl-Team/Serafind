@@ -1,0 +1,29 @@
+[package]
+name = "serafind-index"
+description = "In-memory file index of Serafind: tree walking, filesystem watching."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+serafind-core.workspace = true
+ignore.workspace = true
+hashbrown.workspace = true
+notify.workspace = true
+notify-debouncer-full.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
+proptest.workspace = true
+assert_fs.workspace = true
+divan.workspace = true
+
+[[bench]]
+name = "index"
+harness = false
+
+[lints]
+workspace = true

@@ -1,0 +1,151 @@
+# Serafind settings.
+#
+# Changes apply as soon as the file is saved. Every key is optional: a missing key keeps its
+# default value (shown below). An unknown key or a wrong value is an error: the whole file is
+# then ignored, the previous settings stay, and the error is shown in the search bar.
+
+[appearance]
+# "system" follows the dark or light mode of the desktop; otherwise the name of a theme:
+# "dark", "light", or a file of the themes folder without ".toml" (e.g. "my-theme").
+theme = "system"
+# Themes used when theme = "system".
+dark_theme = "dark"
+light_theme = "light"
+# Override the theme's font and icons (remove the # to use them).
+# font_family = "Inter"   # "Inter" (built in), an installed font name, or a .ttf / .otf path
+# icons = "phosphor"      # "phosphor" or "none"
+# Icons of applications: "real" (each one's own icon) or "generic" (the same icon for all).
+app_icons = "real"
+
+[bar]
+# Dimensions of the bar, in logical pixels, whatever the theme.
+width = 680
+padding = 10
+# Height of a result row.
+row_height = 34
+# Text size; the search input is a little larger.
+font_size = 14
+# Rows shown before scrolling, and results kept at most.
+visible_results = 8
+max_results = 50
+
+[window]
+# Where the bar appears.
+# Distance from the top of the screen, as a fraction of its height (0.0 = top, 0.5 = middle).
+top = 0.25
+# Screen where the bar opens: "mouse" (the screen under the mouse pointer) or "primary".
+screen = "mouse"
+# Linux only. "wayland": keyboard focus and sharp text, but on a Wayland desktop the desktop
+# chooses where the bar appears (GNOME centers it). "x11" goes through XWayland: exact position
+# (top, screen), but GNOME may not give it the keyboard focus.
+backend = "wayland"
+
+[layout]
+# Mode selector: "dropdown" (discreet, at the right of the input) or "tabs" (always shown above).
+mode_selector = "dropdown"
+# How the understood parts of the search are shown: "below" (chips under the input),
+# "inline" (colored in the input) or "hidden".
+chips = "below"
+# Result rows: "single" (name and folder on one line), "double" (folder under the name)
+# or "details" (single line with size and modification date).
+rows = "single"
+
+[behavior]
+# Hide the bar when it loses the focus (click elsewhere, Alt+Tab).
+hide_on_focus_loss = true
+# Show the last search again (selected) when the bar opens.
+keep_last_query = false
+# Escape key: "close", or "clear-then-close" (a first Escape clears the search).
+escape = "close"
+# Keep the bar hidden between openings: it opens instantly but stays in memory. Set to false to
+# close it and free the memory. On Wayland a window cannot be hidden: the bar is always closed.
+keep_window = true
+# Mouse: "double" (a click selects, a double click opens) or "single" (a click opens).
+click = "double"
+# Close the bar after opening a result or showing it in its folder.
+close_after_open = true
+# Close the bar after copying a path or a name.
+close_after_copy = false
+# Close the bar after opening a terminal.
+close_after_terminal = true
+# Put the applications you start most often first. Counts are kept in usage.json, next to the
+# log (~/.local/state/serafind on Linux).
+learn_from_usage = false
+
+[actions]
+# Terminal opened in the folder of a result (the folder itself, or the folder of a file).
+# "auto" finds one: xdg-terminal-exec, ptyxis, gnome-terminal, konsole, kitty, alacritty, wezterm,
+# foot or xterm on Linux; Windows Terminal or PowerShell on Windows. Otherwise a command, where
+# {dir} is replaced by the folder, e.g. "kitty --directory {dir}"; without {dir} the terminal
+# starts in the folder.
+terminal = "auto"
+# Content mode: how Enter opens a file at the line found. "auto" uses the default application
+# of the file when it is an editor that can go to a line (VS Code, Zed, Sublime Text, Kate, gedit,
+# vim, Neovim, Emacs, JetBrains IDEs...), else opens the file as usual. Otherwise a command, where
+# {file} and {line} are replaced, e.g. "code -g {file}:{line}".
+open_at_line = "auto"
+
+[content]
+# Content mode: search inside text files. Files larger than this, in megabytes, are not read.
+max_file_size = 10
+# The search starts after this pause in typing, in milliseconds.
+typing_delay = 250
+
+[keys]
+# Keys of the bar: modifiers (Ctrl, Alt, Shift) and a key, joined with "+". Keys: a letter, a digit,
+# F1 to F24, Enter, Tab, Space, Escape, Backspace, Delete, Insert, Home, End, PageUp, PageDown,
+# Up, Down, Left, Right. A letter, digit or editing key needs Ctrl or Alt: it is used for typing.
+open = "Enter"
+reveal = "Ctrl+Enter"          # show in the file manager
+copy_path = "Ctrl+C"           # when no text of the search is selected
+copy_name = "Ctrl+Shift+C"
+terminal = "Ctrl+T"
+close = "Escape"
+next_result = "Down"
+previous_result = "Up"
+next_page = "PageDown"
+previous_page = "PageUp"
+next_mode = "Tab"
+previous_mode = "Shift+Tab"
+# Accept the proposed folder after "in:" (wins over next_mode when it is the same key).
+complete = "Tab"
+# Modifiers that, with a digit, choose a mode (1 to 5) or open that result (1 to 9).
+mode_with_digit = "Ctrl"
+open_with_digit = "Alt"
+
+[index]
+# Folders indexed. "~" is the home folder.
+roots = ["~"]
+# Folder names never entered, wherever they are.
+exclude_names = [
+    ".git", ".hg", ".svn", "node_modules", "target", "__pycache__", ".venv", "venv", ".tox",
+    ".gradle", ".idea", ".cache", "$Recycle.Bin",
+]
+# Folders never entered, by path ("~" is the home folder). Empty means the default for the
+# system: the trash on Linux, AppData on Windows.
+exclude_paths = []
+# Enter hidden folders too (names starting with a dot, or hidden on Windows).
+# Hidden files are always indexed.
+hidden_folders = false
+
+[startup]
+# Start Serafind when the session opens: an autostart entry on Linux
+# (~/.config/autostart), a Run registry value on Windows. False removes it.
+with_session = true
+
+[shortcut]
+# Serafind sets up the global shortcut itself. Set to false to bind `serafind toggle` to a key
+# in your desktop's keyboard settings instead.
+enabled = true
+# Global shortcut that opens and closes the bar: modifiers (Ctrl, Alt, Shift, Super) and a key,
+# joined with "+". Super is the Windows / logo key.
+toggle = "Super+F"
+# A different shortcut on one system only (remove the # to use it).
+# windows = "Ctrl+Alt+Space"
+# linux = "Super+F"
+
+[tray]
+# Show an icon in the notification area (system tray): click it to open the bar, or open its menu
+# to index again, open these settings or quit. On GNOME, the icon needs the "AppIndicator and
+# KStatusNotifierItem Support" extension.
+enabled = false

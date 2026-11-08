@@ -1,0 +1,494 @@
+//! The bar in a test harness: keys and text go through egui as in the real window.
+
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
+
+use eframe::egui::{self, Key, Modifiers};
+use egui_kittest::Harness;
+use egui_kittest::kittest::Queryable;
+use serafind_index::{Index, Kind};
+use serafind_settings::{Click, Escape, SystemMode};
+
+use super::*;
+use crate::search::SharedIndex;
+
+const HOME: &str = "/home/me";
+
+const FILES: [&str; 6] = [
+    "Documents/facture-2026.pdf",
+    "Documents/Factures/",
+    "Downloads/facture-edf.pdf",
+    "Projects/serafind/README.md",
+    "Music/",
+    "notes.txt",
+];
+
+fn index_of(paths: &[&str]) -> SharedIndex {
+    let mut index = Index::new();
+    index.add_root(Path::new(HOME));
+    for path in paths {
+        let kind = if path.ends_with('/') {
+            Kind::Folder
+        } else {
+            Kind::File
+        };
+        index.insert_path(&Path::new(HOME).join(path.trim_end_matches('/')), kind);
+    }
+    Arc::new(RwLock::new(Some(Arc::new(RwLock::new(index)))))
+}
+
+fn bar_with(settings: Settings, index: SharedIndex, home: &Path) -> Bar {
+    Bar::new(settings, Searcher::local(index, home.to_path_buf()))
+}
+
+fn harness(bar: Bar) -> Harness<'static, Bar> {
+    let settings = bar.settings().clone();
+    Harness::builder()
+        .with_size(egui::vec2(700.0, 520.0))
+        .with_context_setup(move |ctx| {
+            let _ = apply_theme(ctx, &settings);
+        })
+        .build_ui_state(|ui, bar: &mut Bar| bar.ui(ui), bar)
+}
+
+fn default_harness() -> Harness<'static, Bar> {
+    harness(bar_with(
+        Settings::defaults(SystemMode::Dark),
+        index_of(&FILES),
+        Path::new(HOME),
+    ))
+}
+
+fn type_text(harness: &mut Harness<'_, Bar>, text: &str) {
+    harness.get_by_role(egui::Role::TextInput).type_text(text);
+    harness.run();
+}
+
+fn press(harness: &mut Harness<'_, Bar>, modifiers: Modifiers, key: Key) {
+    harness.key_press_modifiers(modifiers, key);
+    harness.run();
+}
+
+fn row_names(harness: &Harness<'_, Bar>) -> Vec<String> {
+    harness
+        .state()
+        .outcome()
+        .rows
+        .iter()
+        .map(|row| row.name.clone())
+        .collect()
+}
+
+#[test]
+fn typing_shows_results_and_count() {
+    let mut harness = default_harness();
+    harness.run();
+    assert!(harness.query_by_label("facture-2026.pdf").is_none());
+    type_text(&mut harness, "fact");
+    assert_eq!(harness.state().line(), "fact");
+    let names = row_names(&harness);
+    assert_eq!(names.len(), 3, "{names:?}");
+    harness.get_by_label("facture-2026.pdf");
+    harness.get_by_label_contains("3 results");
+}
+
+#[test]
+fn empty_line_shows_the_filters_hint() {
+    let mut harness = default_harness();
+    harness.run();
+    harness.get_by_label_contains("a: apps");
+}
+
+#[test]
+fn arrows_move_the_selection_and_enter_opens() {
+    let mut harness = default_harness();
+    type_text(&mut harness, "fact");
+    press(&mut harness, Modifiers::NONE, Key::ArrowDown);
+    press(&mut harness, Modifiers::NONE, Key::ArrowDown);
+    press(&mut harness, Modifiers::NONE, Key::ArrowDown);
+    assert_eq!(harness.state().selected(), 2, "stops at the last row");
+    press(&mut harness, Modifiers::NONE, Key::ArrowUp);
+    assert_eq!(harness.state().selected(), 1);
+    press(&mut harness, Modifiers::NONE, Key::Enter);
+    let expected = harness.state().outcome().rows[1].path.clone();
+    assert_eq!(
+        harness.state_mut().take_requests(),
+        [Request::Act(Action::Open, expected)]
+    );
+}
+
+#[test]
+fn ctrl_enter_reveals_and_alt_number_opens() {
+    let mut harness = default_harness();
+    type_text(&mut harness, "fact");
+    press(&mut harness, Modifiers::COMMAND, Key::Enter);
+    press(&mut harness, Modifiers::ALT, Key::Num2);
+    let rows = harness.state().outcome().rows.clone();
+    assert_eq!(
+        harness.state_mut().take_requests(),
+        [
+            Request::Act(Action::Reveal, rows[0].path.clone()),
+            Request::Act(Action::Open, rows[1].path.clone())
+        ]
+    );
+}
+
+#[test]
+fn a_click_selects_and_a_double_click_opens() {
+    let mut harness = default_harness();
+    type_text(&mut harness, "fact");
+    let second = harness.state().outcome().rows[1].clone();
+    harness.get_by_label(&second.name).click();
+    harness.run();
+    assert_eq!(harness.state().selected(), 1);
+    assert!(harness.state_mut().take_requests().is_empty());
+    // The harness moves time by a quarter of a second per frame: allow slower double clicks.
+    harness
+        .ctx
+        .options_mut(|options| options.input_options.max_double_click_delay = 5.0);
+    harness.get_by_label(&second.name).click();
+    harness.step();
+    harness.get_by_label(&second.name).click();
+    harness.run();
+    assert_eq!(
+        harness.state_mut().take_requests(),
+        [Request::Act(Action::Open, second.path)]
+    );
+}
+
+#[test]
+fn a_single_click_can_open() {
+    let mut settings = Settings::defaults(SystemMode::Dark);
+    settings.config.behavior.click = Click::Single;
+    let mut harness = harness(bar_with(settings, index_of(&FILES), Path::new(HOME)));
+    type_text(&mut harness, "readme");
+    harness.get_by_label("README.md").click();
+    harness.run();
+    assert_eq!(
+        harness.state_mut().take_requests(),
+        [Request::Act(
+            Action::Open,
+            PathBuf::from("/home/me/Projects/serafind/README.md")
+        )]
+    );
+}
+
+#[test]
+fn copy_keys_copy_the_path_or_the_name() {
+    let mut harness = default_harness();
+    type_text(&mut harness, "readme");
+    // Text selected in the input: Ctrl+C copies it, not the path.
+    press(&mut harness, Modifiers::COMMAND, Key::A);
+    press(&mut harness, Modifiers::COMMAND, Key::C);
+    assert_eq!(harness.state().notice(), None);
+    press(&mut harness, Modifiers::NONE, Key::End);
+    press(&mut harness, Modifiers::COMMAND | Modifiers::SHIFT, Key::C);
+    assert_eq!(harness.state().notice(), Some("Name copied"));
+    press(&mut harness, Modifiers::COMMAND, Key::C);
+    assert_eq!(harness.state().notice(), Some("Path copied"));
+    assert!(
+        harness.state_mut().take_requests().is_empty(),
+        "the bar stays open"
+    );
+}
+
+#[test]
+fn the_copy_event_of_the_window_copies_the_path() {
+    // The real window sends Ctrl+C as a Copy event, not as a key.
+    let mut harness = default_harness();
+    type_text(&mut harness, "readme");
+    harness.event(egui::Event::Copy);
+    harness.run();
+    assert_eq!(harness.state().notice(), Some("Path copied"));
+}
+
+#[test]
+fn the_selection_stays_when_the_settings_are_reloaded() {
+    let mut harness = default_harness();
+    type_text(&mut harness, "fact");
+    press(&mut harness, Modifiers::NONE, Key::ArrowDown);
+    let settings = harness.state().settings().clone();
+    harness.state_mut().set_settings(settings);
+    harness.run();
+    assert_eq!(harness.state().selected(), 1);
+    type_text(&mut harness, "u");
+    assert_eq!(harness.state().selected(), 0, "a new search starts at the top");
+}
+
+#[test]
+fn enter_starts_an_application_and_other_actions_take_its_program() {
+    let firefox = serafind_apps::App {
+        id: "firefox.desktop".to_owned(),
+        name: "Firefox".to_owned(),
+        source: PathBuf::from("/usr/share/applications/firefox.desktop"),
+        executable: Some(PathBuf::from("/usr/bin/firefox")),
+        icon: None,
+        launch: serafind_apps::Launch::Command {
+            arguments: vec!["firefox".to_owned()],
+            terminal: false,
+            folder: None,
+        },
+    };
+    let searcher = Searcher::local_with_apps(index_of(&FILES), vec![firefox], PathBuf::from(HOME));
+    let mut harness = harness(Bar::new(Settings::defaults(SystemMode::Dark), searcher));
+    type_text(&mut harness, "firefox");
+    assert_eq!(row_names(&harness), ["Firefox"]);
+    press(&mut harness, Modifiers::NONE, Key::Enter);
+    press(&mut harness, Modifiers::COMMAND, Key::Enter);
+    assert_eq!(
+        harness.state_mut().take_requests(),
+        [
+            Request::Act(Action::Launch, PathBuf::from("firefox.desktop")),
+            Request::Act(Action::Reveal, PathBuf::from("/usr/bin/firefox")),
+        ]
+    );
+}
+
+#[test]
+fn ctrl_t_opens_a_terminal() {
+    let mut harness = default_harness();
+    type_text(&mut harness, "readme");
+    press(&mut harness, Modifiers::COMMAND, Key::T);
+    assert_eq!(
+        harness.state_mut().take_requests(),
+        [Request::Act(
+            Action::Terminal,
+            PathBuf::from("/home/me/Projects/serafind/README.md")
+        )]
+    );
+}
+
+#[test]
+fn keys_come_from_the_settings() {
+    let mut settings = Settings::defaults(SystemMode::Dark);
+    settings.config.keys.open = "Ctrl+O".to_owned();
+    settings.config.keys.close = "Ctrl+Q".to_owned();
+    settings.config.keys.next_result = "Ctrl+J".to_owned();
+    let mut harness = harness(bar_with(settings, index_of(&FILES), Path::new(HOME)));
+    type_text(&mut harness, "fact");
+    press(&mut harness, Modifiers::NONE, Key::Escape);
+    press(&mut harness, Modifiers::NONE, Key::Enter);
+    assert!(
+        harness.state_mut().take_requests().is_empty(),
+        "the old keys do nothing"
+    );
+    press(&mut harness, Modifiers::COMMAND, Key::J);
+    assert_eq!(harness.state().selected(), 1);
+    press(&mut harness, Modifiers::COMMAND, Key::O);
+    press(&mut harness, Modifiers::COMMAND, Key::Q);
+    let second = harness.state().outcome().rows[1].path.clone();
+    assert_eq!(
+        harness.state_mut().take_requests(),
+        [Request::Act(Action::Open, second), Request::Close]
+    );
+}
+
+#[test]
+fn escape_closes() {
+    let mut harness = default_harness();
+    type_text(&mut harness, "fact");
+    press(&mut harness, Modifiers::NONE, Key::Escape);
+    assert_eq!(harness.state_mut().take_requests(), [Request::Close]);
+}
+
+#[test]
+fn escape_can_clear_first() {
+    let mut settings = Settings::defaults(SystemMode::Dark);
+    settings.config.behavior.escape = Escape::ClearThenClose;
+    let mut harness = harness(bar_with(settings, index_of(&FILES), Path::new(HOME)));
+    type_text(&mut harness, "fact");
+    press(&mut harness, Modifiers::NONE, Key::Escape);
+    assert_eq!(harness.state().line(), "");
+    assert!(harness.state_mut().take_requests().is_empty());
+    press(&mut harness, Modifiers::NONE, Key::Escape);
+    assert_eq!(harness.state_mut().take_requests(), [Request::Close]);
+}
+
+#[test]
+fn tab_and_ctrl_numbers_choose_the_mode() {
+    let mut harness = default_harness();
+    type_text(&mut harness, "fact");
+    press(&mut harness, Modifiers::NONE, Key::Tab);
+    assert_eq!(harness.state().tab(), SearchMode::Apps);
+    press(&mut harness, Modifiers::SHIFT, Key::Tab);
+    assert_eq!(harness.state().tab(), SearchMode::All);
+    press(&mut harness, Modifiers::COMMAND, Key::Num3);
+    assert_eq!(harness.state().tab(), SearchMode::Folders);
+    assert_eq!(row_names(&harness), ["Factures"]);
+    press(&mut harness, Modifiers::COMMAND, Key::Num4);
+    assert_eq!(row_names(&harness).len(), 2);
+}
+
+#[test]
+fn a_mode_filter_wins_over_the_tab() {
+    let mut harness = default_harness();
+    press(&mut harness, Modifiers::COMMAND, Key::Num4);
+    type_text(&mut harness, "d: fact");
+    assert_eq!(harness.state().tab(), SearchMode::Files);
+    assert_eq!(harness.state().outcome().mode, SearchMode::Folders);
+    assert_eq!(row_names(&harness), ["Factures"]);
+    // The selector shows the mode in use.
+    harness.get_by_label_contains("Folders");
+}
+
+#[test]
+fn chips_show_what_was_understood() {
+    let mut harness = default_harness();
+    type_text(&mut harness, "fact ext:pdf -edf in:~/Nowhere");
+    harness.get_by_label("Ext: pdf");
+    harness.get_by_label("Not edf");
+    harness.get_by_label("Not edf");
+    assert!(
+        !harness.state().outcome().query.parts[3].is_used(),
+        "the missing folder is reported"
+    );
+    assert_eq!(row_names(&harness), ["facture-2026.pdf"]);
+}
+
+#[test]
+fn indexing_is_shown_until_the_index_is_ready() {
+    let index: SharedIndex = Arc::new(RwLock::new(None));
+    let mut harness = harness(bar_with(
+        Settings::defaults(SystemMode::Dark),
+        Arc::clone(&index),
+        Path::new(HOME),
+    ));
+    type_text(&mut harness, "fact");
+    harness.get_by_label_contains("Indexing");
+    *index.write().unwrap() = index_of(&FILES).read().unwrap().clone();
+    harness.run();
+    assert_eq!(row_names(&harness).len(), 3);
+}
+
+#[test]
+fn problems_are_shown_in_the_footer() {
+    let mut harness = default_harness();
+    harness
+        .state_mut()
+        .set_problems(vec!["config.toml:2:1: unknown field `widht`".to_owned()]);
+    harness.run();
+    harness.get_by_label_contains("unknown field `widht`");
+}
+
+#[test]
+fn tab_completes_the_in_folder() {
+    let home = assert_fs::TempDir::new().unwrap();
+    std::fs::create_dir_all(home.path().join("Documents/Taxes")).unwrap();
+    std::fs::create_dir_all(home.path().join("Downloads")).unwrap();
+    let mut harness = harness(bar_with(
+        Settings::defaults(SystemMode::Dark),
+        index_of(&[]),
+        home.path(),
+    ));
+    type_text(&mut harness, "in:~/Doc");
+    press(&mut harness, Modifiers::NONE, Key::Tab);
+    assert_eq!(harness.state().line(), "in:~/Documents/");
+    assert_eq!(
+        harness.state().tab(),
+        SearchMode::All,
+        "Tab completed instead of changing the mode"
+    );
+    press(&mut harness, Modifiers::NONE, Key::Tab);
+    assert_eq!(harness.state().line(), "in:~/Documents/Taxes/");
+}
+
+#[test]
+fn every_layout_draws() {
+    for (chips, rows, selector) in [
+        (Chips::Below, Rows::Single, ModeSelector::Dropdown),
+        (Chips::Inline, Rows::Double, ModeSelector::Tabs),
+        (Chips::Hidden, Rows::Details, ModeSelector::Dropdown),
+    ] {
+        let mut settings = Settings::defaults(SystemMode::Light);
+        settings.config.layout.chips = chips;
+        settings.config.layout.rows = rows;
+        settings.config.layout.mode_selector = selector;
+        let mut harness = harness(bar_with(settings, index_of(&FILES), Path::new(HOME)));
+        type_text(&mut harness, "fact ext:pdf");
+        assert_eq!(row_names(&harness).len(), 2, "{chips:?} {rows:?} {selector:?}");
+        harness.get_by_label("facture-2026.pdf");
+    }
+}
+
+/// Renders the bar to PNG files to look at it: `SERAFIND_PREVIEW=/some/folder cargo test -p
+/// serafind preview -- --ignored`.
+#[test]
+#[ignore = "writes images for a visual check"]
+fn preview() {
+    let Some(folder) = std::env::var_os("SERAFIND_PREVIEW") else {
+        return;
+    };
+    let folder = PathBuf::from(folder);
+    for (name, mode, line) in [
+        ("dark-empty", SystemMode::Dark, ""),
+        ("dark-results", SystemMode::Dark, "fact ext:pdf -edf"),
+        ("light-results", SystemMode::Light, "fact"),
+        ("dark-fuzzy", SystemMode::Dark, "fctr"),
+    ] {
+        let mut harness = harness(bar_with(
+            Settings::defaults(mode),
+            index_of(&FILES),
+            Path::new(HOME),
+        ));
+        harness.run();
+        if !line.is_empty() {
+            type_text(&mut harness, line);
+        }
+        press(&mut harness, Modifiers::NONE, Key::ArrowDown);
+        let image = harness.render().expect("render");
+        image.save(folder.join(format!("{name}.png"))).expect("save");
+    }
+}
+
+/// Renders the bar inside the same frame as the window (shadow margin), at the window width,
+/// for the default size and a larger one.
+#[test]
+#[ignore = "writes images for a visual check"]
+fn preview_window() {
+    let Some(folder) = std::env::var_os("SERAFIND_PREVIEW") else {
+        return;
+    };
+    let folder = PathBuf::from(folder);
+    for (width, padding, row_height) in [(680, 10, 34), (760, 12, 38)] {
+        for (name, line) in [("empty", ""), ("results", "fact")] {
+            let mut settings = Settings::defaults(SystemMode::Dark);
+            settings.config.bar.width = width;
+            settings.config.bar.padding = padding;
+            settings.config.bar.row_height = row_height;
+            let bar = bar_with(settings.clone(), index_of(&FILES), Path::new(HOME));
+            let window = f32::from(width) + 2.0 * f32::from(crate::app::SHADOW_MARGIN);
+            // The harness puts 8 points around the ui: add them so the ui is as wide as the window.
+            let mut harness = Harness::builder()
+                .with_size(egui::vec2(window + 16.0, 340.0))
+                .with_context_setup(move |ctx| {
+                    let _ = apply_theme(ctx, &settings);
+                })
+                .build_ui_state(
+                    move |ui, bar: &mut Bar| {
+                        let available = ui.available_rect_before_wrap();
+                        let rect = egui::Frame::new()
+                            .inner_margin(egui::Margin::same(crate::app::SHADOW_MARGIN))
+                            .show(ui, |ui| bar.ui(ui))
+                            .response
+                            .rect;
+                        eprintln!(
+                            "{width}: window {window}, ui {:.1}..{:.1}, frame {:.1}..{:.1}",
+                            available.left(),
+                            available.right(),
+                            rect.left(),
+                            rect.right()
+                        );
+                    },
+                    bar,
+                );
+            harness.run();
+            if !line.is_empty() {
+                type_text(&mut harness, line);
+            }
+            let image = harness.render().expect("render");
+            image
+                .save(folder.join(format!("window-{width}-{name}.png")))
+                .expect("save");
+        }
+    }
+}

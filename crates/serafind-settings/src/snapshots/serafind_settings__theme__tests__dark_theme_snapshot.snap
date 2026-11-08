@@ -1,0 +1,51 @@
+---
+source: crates/serafind-settings/src/theme.rs
+expression: "Theme::built_in(\"dark\").unwrap()"
+---
+Theme {
+    name: "Default Dark",
+    mode: Dark,
+    colors: Colors {
+        primary: #4c4c9d,
+        secondary: #712f79,
+        tertiary: #976391,
+        accent: #f7996e,
+        danger: #883007,
+        background: #171624,
+        surface: #292538,
+        surface_elevated: #353044,
+        surface_hover: #3e3850,
+        text_primary: #ffffff,
+        text_secondary: #b7afc1,
+        text_disabled: #6e6779,
+        border: #45404e,
+        selection: #4c4c9d,
+        focus: #f7996e,
+        success: #4caf79,
+        warning: #e5b45c,
+        error: #d65b5b,
+        info: #6fa8dc,
+    },
+    font: Font {
+        family: "Inter",
+    },
+    shape: Shape {
+        radius: 10,
+        shadow: true,
+    },
+    icons: Icons {
+        set: Phosphor,
+        colors: IconColors {
+            folder: None,
+            document: None,
+            pdf: None,
+            image: None,
+            audio: None,
+            video: None,
+            archive: None,
+            code: None,
+            app: None,
+            other: None,
+        },
+    },
+}
