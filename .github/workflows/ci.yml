@@ -27,6 +27,9 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          # Keep the compiled dependencies even when a check fails: the next run starts from them.
+          cache-on-failure: true
       - name: Format
         run: cargo fmt --all --check
       - name: Clippy
@@ -45,6 +48,9 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          # Keep the compiled dependencies even when a check fails: the next run starts from them.
+          cache-on-failure: true
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Tests
