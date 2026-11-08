@@ -1,6 +1,6 @@
 //! Which entries a query keeps, and in which order.
 //!
-//! Strict matching first (as in PowerHive): every word must be contained in the name (a word with
+//! Strict matching first: every word must be contained in the name (a word with
 //! `*` or `?` is a pattern found anywhere in the name; `^` anchors it at the start of the name and
 //! `$` at the end), no excluded word may be, the extension must be one
 //! of `ext:`, and the kind must fit the mode. When no entry matches strictly, the words are matched
