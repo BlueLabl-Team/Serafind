@@ -1,4 +1,4 @@
-//! Completion of the folder typed after `in:` (as in PowerHive): `~/Doc` gives `~/Documents/`.
+//! Completion of the folder typed after `in:`: `~/Doc` gives `~/Documents/`.
 
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 

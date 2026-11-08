@@ -1,4 +1,4 @@
-# Serafind theme: Default Dark (the colors of PowerHive's Default Dark theme).
+# Serafind theme: Default Dark.
 #
 # Copy this file under another name in the same folder to make your own theme, then choose it
 # in config.toml (theme = "file-name-without-toml"). A theme can start from another one with

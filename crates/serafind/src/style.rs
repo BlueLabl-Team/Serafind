@@ -198,7 +198,7 @@ pub fn apply(ctx: &egui::Context, settings: &Settings) {
             (TextStyle::Body, FontId::proportional(size)),
             (TextStyle::Button, FontId::proportional(size)),
             (TextStyle::Monospace, FontId::monospace(size * 0.9)),
-            // PowerHive: body 14, small 12.
+            // Body 14, small 12.
             (TextStyle::Small, FontId::proportional(size * 12.0 / 14.0)),
         ]
         .into();

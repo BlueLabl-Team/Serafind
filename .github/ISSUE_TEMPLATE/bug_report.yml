@@ -1,0 +1,36 @@
+name: Bug report
+description: Something does not work as described.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: status
+    attributes:
+      label: Output of `serafind status`
+      render: text
+  - type: input
+    id: system
+    attributes:
+      label: System
+      description: Distribution and desktop (e.g. Fedora 42, GNOME 48, Wayland), or Windows version.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Serafind version
+      description: The output of `serafind --version`.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: The end of `~/.local/state/serafind/serafind.log` (Linux) or `%LOCALAPPDATA%\serafind\serafind.log` (Windows), if relevant.
+      render: text

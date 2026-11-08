@@ -55,13 +55,16 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2
         with:
-          tool: cargo-deb@3.8.0,cargo-generate-rpm@0.21.1
+          tool: cargo-deb@3.8.0,cargo-generate-rpm@0.21.1,cargo-about@0.9.3
       - name: Build
         run: cargo build --profile dist --locked -p serafind
+      # The licenses of the crates built in: their text must come with the program.
+      - name: Third-party licenses
+        run: cargo about generate --locked -o THIRD_PARTY_LICENSES.html about.hbs
       - name: Archive
         run: |
           mkdir -p out "serafind-$VERSION"
-          cp target/dist/serafind README.md LICENSE "serafind-$VERSION/"
+          cp target/dist/serafind README.md LICENSE THIRD_PARTY_LICENSES.html crates/serafind/assets/fonts/*-LICENSE.txt "serafind-$VERSION/"
           tar czf "out/serafind-$VERSION-linux-x86_64.tar.gz" "serafind-$VERSION"
       - name: .deb
         run: cargo deb -p serafind --profile dist --no-build --output "out/serafind_${VERSION}_amd64.deb"
@@ -84,13 +87,20 @@ jobs:
         with:
           toolchain: 1.99.1 # as in rust-toolchain.toml
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2
+        with:
+          tool: cargo-about@0.9.3
       - name: Build
         run: cargo build --profile dist --locked -p serafind
+      # The licenses of the crates built in: their text must come with the program.
+      - name: Third-party licenses
+        run: cargo about generate --locked -o THIRD_PARTY_LICENSES.html about.hbs
       - name: Archive
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force out, "serafind-$env:VERSION" | Out-Null
-          Copy-Item target/dist/serafind.exe, README.md, LICENSE "serafind-$env:VERSION/"
+          Copy-Item target/dist/serafind.exe, README.md, LICENSE, THIRD_PARTY_LICENSES.html "serafind-$env:VERSION/"
+          Copy-Item crates/serafind/assets/fonts/*-LICENSE.txt "serafind-$env:VERSION/"
           Compress-Archive "serafind-$env:VERSION" "out/serafind-$env:VERSION-windows-x86_64.zip"
       - name: Installer
         shell: pwsh
