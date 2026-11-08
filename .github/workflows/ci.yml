@@ -58,6 +58,8 @@ jobs:
       # build: Windows spends much of a Rust build scanning the files it writes.
       - uses: samypr100/setup-dev-drive@v3
         with:
+          # The default (1 GB) is far too small for the build; the drive only grows as it fills.
+          drive-size: 16GB
           workspace-copy: true
           env-mapping: |
             CARGO_HOME,{{ DEV_DRIVE }}/.cargo
