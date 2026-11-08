@@ -1,8 +1,6 @@
 //! The real executable: start in the background, status, search through the protocol, quit.
 //! Each test uses its own socket and settings (indexing a temporary folder, not the home folder).
-#![cfg(unix)]
 
-use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::time::{Duration, Instant};
@@ -172,6 +170,7 @@ fn start_search_and_quit() {
 #[cfg(unix)]
 #[test]
 fn bad_requests_are_answered_with_an_error() {
+    use std::io::{BufRead, Write};
     let instance = Instance::new("bad");
     assert!(instance.run(&[]).status.success());
     let mut stream = std::os::unix::net::UnixStream::connect(&instance.socket).unwrap();
