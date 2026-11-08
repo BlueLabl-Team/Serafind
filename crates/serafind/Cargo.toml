@@ -6,6 +6,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
+publish = false
 
 [dependencies]
 serafind-core.workspace = true
@@ -46,3 +47,37 @@ rstest.workspace = true
 
 [lints]
 workspace = true
+
+# Linux packages: `cargo deb -p serafind --profile dist` and
+# `cargo generate-rpm -p crates/serafind --profile dist` (after `cargo build --profile dist`).
+[package.metadata.deb]
+name = "serafind"
+maintainer = "BlueLabL <https://github.com/BlueLabl-Team>"
+copyright = "BlueLabL"
+license-file = ["../../LICENSE", "0"]
+extended-description = """\
+A quick search bar for files, folders, applications and text inside files, opened with a \
+global shortcut (Super+F). A small resident process keeps an in-memory index of the home \
+folder up to date."""
+section = "utils"
+priority = "optional"
+depends = "$auto"
+assets = [
+    ["target/release/serafind", "usr/bin/", "755"],
+    ["assets/io.github.bluelabl_team.Serafind.desktop", "usr/share/applications/", "644"],
+    ["assets/logo/serafind-256.png", "usr/share/icons/hicolor/256x256/apps/io.github.bluelabl_team.Serafind.png", "644"],
+    ["assets/logo/serafind.svg", "usr/share/icons/hicolor/scalable/apps/io.github.bluelabl_team.Serafind.svg", "644"],
+    ["../../README.md", "usr/share/doc/serafind/README.md", "644"],
+]
+
+[package.metadata.generate-rpm]
+summary = "Quick search bar for files, folders, applications and text inside files"
+assets = [
+    { source = "target/release/serafind", dest = "/usr/bin/serafind", mode = "755" },
+    { source = "assets/io.github.bluelabl_team.Serafind.desktop", dest = "/usr/share/applications/io.github.bluelabl_team.Serafind.desktop", mode = "644" },
+    { source = "assets/logo/serafind-256.png", dest = "/usr/share/icons/hicolor/256x256/apps/io.github.bluelabl_team.Serafind.png", mode = "644" },
+    { source = "assets/logo/serafind.svg", dest = "/usr/share/icons/hicolor/scalable/apps/io.github.bluelabl_team.Serafind.svg", mode = "644" },
+    { source = "../../README.md", dest = "/usr/share/doc/serafind/README.md", mode = "644", doc = true },
+    { source = "../../LICENSE", dest = "/usr/share/licenses/serafind/LICENSE", mode = "644", doc = true },
+]
+auto-req = "auto"

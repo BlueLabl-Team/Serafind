@@ -83,13 +83,24 @@ mod tests {
     #[case("/home/me/Projects/app/node_modules", true)]
     #[case("/home/me/Projects/app/target", true)]
     #[case("/home/me/.config", true)]
-    #[case("/home/me/.local/share/Trash", true)]
     #[case("/home/me/Documents", false)]
     #[case("/home/me/build", false)]
     #[case("/home/me/my.target", false)]
     fn default_exclusions(#[case] path: &str, #[case] excluded: bool) {
         let exclusions = Exclusions::defaults(Path::new("/home/me"));
         assert_eq!(exclusions.excludes_folder(Path::new(path), false), excluded);
+    }
+
+    #[test]
+    fn the_default_paths_depend_on_the_system() {
+        let exclusions = Exclusions::defaults(Path::new("/home/me"));
+        let (left_out, kept) = if cfg!(windows) {
+            ("/home/me/AppData", "/home/me/.local/share/Trash")
+        } else {
+            ("/home/me/.local/share/Trash", "/home/me/AppData")
+        };
+        assert!(exclusions.excludes_folder(Path::new(left_out), false));
+        assert!(!exclusions.excludes_folder(Path::new(kept), false));
     }
 
     #[test]

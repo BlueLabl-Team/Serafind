@@ -41,13 +41,14 @@ fn search(index: &Index, line: &str) -> Vec<String> {
         .collect()
 }
 
+/// The path under the root, with `/` between folders on every system.
 fn relative(index: &Index, id: EntryId) -> String {
     index
         .path_of(id)
         .strip_prefix(ROOT)
         .unwrap()
         .to_string_lossy()
-        .into_owned()
+        .replace('\\', "/")
 }
 
 fn all(index: &Index) -> Vec<String> {
@@ -315,7 +316,12 @@ fn content_candidates_are_files_with_the_file_filters() {
         index.content_candidates(&query).map(|files| {
             files
                 .iter()
-                .map(|path| path.strip_prefix(&root).unwrap().to_string_lossy().into_owned())
+                .map(|path| {
+                    path.strip_prefix(&root)
+                        .unwrap()
+                        .to_string_lossy()
+                        .replace('\\', "/")
+                })
                 .collect::<Vec<_>>()
         })
     };

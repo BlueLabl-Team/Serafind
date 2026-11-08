@@ -1,0 +1,89 @@
+# Checks every pull request to dev or main, and every push to them.
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # Line numbers are enough for failing tests; full debug info only slows the build down.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_PROFILE_TEST_DEBUG: line-tables-only
+
+jobs:
+  linux:
+    name: Linux (format, Clippy, tests)
+    # A test that hangs fails the job instead of holding a runner for hours.
+    timeout-minutes: 30
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Keep the compiled dependencies even when a check fails: the next run starts from them.
+          cache-on-failure: true
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Tests
+        run: cargo test --workspace --locked --no-fail-fast
+
+  windows:
+    name: Windows (Clippy, tests)
+    # A test that hangs fails the job instead of holding a runner for hours.
+    timeout-minutes: 30
+    # After Linux: an error common to both is reported (and fixed) once, on the faster system.
+    needs: linux
+    runs-on: windows-latest
+    env:
+      # Rust's own linker: much faster than Microsoft's for the many test programs.
+      CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER: rust-lld.exe
+    steps:
+      - uses: actions/checkout@v5
+      # A Dev Drive (ReFS, not scanned by the antivirus) for the sources, the toolchain and the
+      # build: Windows spends much of a Rust build scanning the files it writes.
+      - uses: samypr100/setup-dev-drive@v3
+        with:
+          # The default (1 GB) is far too small for the build; the drive only grows as it fills.
+          drive-size: 16GB
+          workspace-copy: true
+          env-mapping: |
+            CARGO_HOME,{{ DEV_DRIVE }}/.cargo
+            RUSTUP_HOME,{{ DEV_DRIVE }}/.rustup
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # v1: replaces a nearly empty cache saved by a run that failed early.
+          prefix-key: v1-rust
+          workspaces: ${{ env.DEV_DRIVE_WORKSPACE }}
+          # Keep the compiled dependencies even when a check fails: the next run starts from them.
+          cache-on-failure: true
+      - name: Clippy
+        working-directory: ${{ env.DEV_DRIVE_WORKSPACE }}
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Tests
+        working-directory: ${{ env.DEV_DRIVE_WORKSPACE }}
+        run: cargo test --workspace --locked --no-fail-fast
+
+  dependencies:
+    name: Dependencies (advisories, licenses, sources)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: EmbarkStudios/cargo-deny-action@v2
