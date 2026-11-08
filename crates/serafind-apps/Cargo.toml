@@ -3,6 +3,7 @@ name = "serafind-apps"
 description = "Serafind's catalog of installed applications: .desktop files (Linux), Start menu and Store apps (Windows), their icons and how to launch them."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true

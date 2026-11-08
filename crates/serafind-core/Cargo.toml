@@ -3,6 +3,7 @@ name = "serafind-core"
 description = "Search line syntax and matching rules for Serafind (no system access)."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true

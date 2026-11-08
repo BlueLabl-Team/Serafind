@@ -383,7 +383,7 @@ mod tests {
         assert_eq!(command.get_program(), "myterm");
         assert_eq!(arguments(&command), ["--cwd", "/srv/data", "--big"]);
         let command = terminal_command("myterm", dir, None, &|_| false).unwrap();
-        assert!(arguments(&command).is_empty());
+        assert_eq!(arguments(&command), Vec::<String>::new());
         assert_eq!(command.get_current_dir(), Some(dir));
     }
 

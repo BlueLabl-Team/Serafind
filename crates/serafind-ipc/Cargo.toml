@@ -3,6 +3,7 @@ name = "serafind-ipc"
 description = "The local protocol of Serafind: JSON messages, one per line, over a local socket."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
