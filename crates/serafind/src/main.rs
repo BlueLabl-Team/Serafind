@@ -368,6 +368,30 @@ fn detach(command: &mut std::process::Command) {
     const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
+    stop_sharing_standard_streams();
+}
+
+/// Windows passes every inheritable handle of this process to the processes it starts: the
+/// resident process would keep the pipes of this command's own output open as long as it runs,
+/// and a program reading that output (a script, a test) would wait forever for its end. Unix
+/// closes them on its own.
+#[cfg(windows)]
+fn stop_sharing_standard_streams() {
+    use windows_sys::Win32::Foundation::{HANDLE_FLAG_INHERIT, SetHandleInformation};
+    use windows_sys::Win32::System::Console::{
+        GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+    };
+    for stream in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+        // SAFETY: only clears the inherit flag of this process's own standard handles; an
+        // invalid or missing handle makes the call fail harmlessly.
+        #[allow(unsafe_code)]
+        unsafe {
+            let handle = GetStdHandle(stream);
+            if !handle.is_null() {
+                SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0);
+            }
+        }
+    }
 }
 
 #[cfg(not(any(unix, windows)))]
