@@ -3943,7 +3943,7 @@ checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 
 [[package]]
 name = "serafind"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ashpd",
  "assert_fs",
@@ -3976,7 +3976,7 @@ dependencies = [
 
 [[package]]
 name = "serafind-apps"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "assert_fs",
  "dirs",
@@ -3988,7 +3988,7 @@ dependencies = [
 
 [[package]]
 name = "serafind-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "insta",
  "nucleo-matcher",
@@ -3998,7 +3998,7 @@ dependencies = [
 
 [[package]]
 name = "serafind-index"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "assert_fs",
  "divan",
@@ -4013,7 +4013,7 @@ dependencies = [
 
 [[package]]
 name = "serafind-ipc"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dirs",
  "insta",
@@ -4027,7 +4027,7 @@ dependencies = [
 
 [[package]]
 name = "serafind-settings"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "assert_fs",
  "dirs",
