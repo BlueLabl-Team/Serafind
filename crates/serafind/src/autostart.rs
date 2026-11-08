@@ -81,41 +81,102 @@ fn autostart_entry(executable: &Path) -> String {
 
 #[cfg(windows)]
 mod windows {
-    use std::os::windows::process::CommandExt;
+    use std::io;
     use std::path::Path;
-    use std::process::Command;
 
-    const KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
+    use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
+    use windows_sys::Win32::System::Registry::{
+        HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_SZ, RegDeleteKeyValueW, RegGetValueW, RegSetKeyValueW,
+    };
+
+    const KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
     const VALUE: &str = "Serafind";
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-    /// Sets or deletes the `Run` value with `reg.exe`.
-    pub fn apply(with_session: bool, executable: &Path) -> std::io::Result<Option<String>> {
+    /// Sets or deletes the `Run` value of the current user, through the registry API.
+    pub fn apply(with_session: bool, executable: &Path) -> io::Result<Option<String>> {
         let wanted = format!("\"{}\" start", executable.display());
-        let current = Command::new("reg")
-            .args(["query", KEY, "/v", VALUE])
-            .creation_flags(CREATE_NO_WINDOW)
-            .output()?;
-        let text = String::from_utf8_lossy(&current.stdout);
-        let present = current.status.success();
-        if with_session && present && text.contains(&wanted) || !with_session && !present {
+        let current = read()?;
+        if with_session && current.as_deref() == Some(wanted.as_str()) || !with_session && current.is_none() {
             return Ok(None);
         }
-        let mut command = Command::new("reg");
         if with_session {
-            command.args(["add", KEY, "/v", VALUE, "/t", "REG_SZ", "/d", &wanted, "/f"]);
+            write(&wanted)?;
+            Ok(Some(format!(r"registered in HKCU\{KEY}")))
         } else {
-            command.args(["delete", KEY, "/v", VALUE, "/f"]);
+            delete()?;
+            Ok(Some(format!(r"removed from HKCU\{KEY}")))
         }
-        let status = command.creation_flags(CREATE_NO_WINDOW).status()?;
-        if !status.success() {
-            return Err(std::io::Error::other(format!("reg.exe failed ({status})")));
-        }
-        Ok(Some(if with_session {
-            format!("registered in {KEY}")
+    }
+
+    /// The text as a null-terminated UTF-16 string.
+    fn wide(text: &str) -> Vec<u16> {
+        text.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    fn check(status: u32) -> io::Result<()> {
+        if status == ERROR_SUCCESS {
+            Ok(())
         } else {
-            format!("removed from {KEY}")
-        }))
+            Err(io::Error::from_raw_os_error(
+                i32::try_from(status).unwrap_or(i32::MAX),
+            ))
+        }
+    }
+
+    /// The current value; `None` when there is none.
+    fn read() -> io::Result<Option<String>> {
+        let (key, value) = (wide(KEY), wide(VALUE));
+        let mut buffer = vec![0u16; 2048];
+        let mut size = u32::try_from(buffer.len() * 2).unwrap_or(u32::MAX);
+        // SAFETY: the key and value names are null-terminated; the buffer and its size in bytes
+        // describe the same memory, and RRF_RT_REG_SZ makes Windows end the text with a null.
+        #[allow(unsafe_code)]
+        let status = unsafe {
+            RegGetValueW(
+                HKEY_CURRENT_USER,
+                key.as_ptr(),
+                value.as_ptr(),
+                RRF_RT_REG_SZ,
+                std::ptr::null_mut(),
+                buffer.as_mut_ptr().cast(),
+                &raw mut size,
+            )
+        };
+        if status == ERROR_FILE_NOT_FOUND {
+            return Ok(None);
+        }
+        check(status)?;
+        let length = buffer.iter().position(|&unit| unit == 0).unwrap_or(buffer.len());
+        Ok(Some(String::from_utf16_lossy(&buffer[..length])))
+    }
+
+    fn write(text: &str) -> io::Result<()> {
+        let (key, value, data) = (wide(KEY), wide(VALUE), wide(text));
+        let bytes = u32::try_from(data.len() * 2).map_err(io::Error::other)?;
+        // SAFETY: null-terminated names; the data pointer and its size in bytes match.
+        #[allow(unsafe_code)]
+        let status = unsafe {
+            RegSetKeyValueW(
+                HKEY_CURRENT_USER,
+                key.as_ptr(),
+                value.as_ptr(),
+                REG_SZ,
+                data.as_ptr().cast(),
+                bytes,
+            )
+        };
+        check(status)
+    }
+
+    fn delete() -> io::Result<()> {
+        let (key, value) = (wide(KEY), wide(VALUE));
+        // SAFETY: null-terminated names.
+        #[allow(unsafe_code)]
+        let status = unsafe { RegDeleteKeyValueW(HKEY_CURRENT_USER, key.as_ptr(), value.as_ptr()) };
+        if status == ERROR_FILE_NOT_FOUND {
+            return Ok(());
+        }
+        check(status)
     }
 }
 

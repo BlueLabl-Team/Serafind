@@ -73,8 +73,15 @@ enum Command {
 }
 
 fn main() -> ExitCode {
+    // Commands typed in a terminal print there. The resident process and the bar stay apart
+    // from any console: attached, closing the terminal would stop them.
     #[cfg(windows)]
-    attach_to_console();
+    if !std::env::args()
+        .skip(1)
+        .any(|argument| argument == "daemon" || argument == "bar")
+    {
+        attach_to_console();
+    }
     let mut command = Command::Start;
     let mut settings_dir = serafind_settings::default_dir();
     let mut arguments = std::env::args().skip(1);
@@ -362,10 +369,10 @@ fn detach(command: &mut std::process::Command) {
 #[cfg(windows)]
 fn detach(command: &mut std::process::Command) {
     use std::os::windows::process::CommandExt;
-    const DETACHED_PROCESS: u32 = 0x0000_0008;
+    // A graphical program has no console: it only needs its own process group, so that
+    // Ctrl+C in the terminal does not reach it.
     const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
+    command.creation_flags(CREATE_NEW_PROCESS_GROUP);
     stop_sharing_standard_streams();
 }
 
