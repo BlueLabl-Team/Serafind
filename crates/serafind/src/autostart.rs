@@ -1,8 +1,10 @@
 //! Starting Serafind with the session (`[startup] with_session`): an XDG autostart file on
 //! Linux, a `Run` registry value on Windows. Both run `serafind start`.
 
+#[cfg(not(windows))]
 use std::path::{Path, PathBuf};
 
+#[cfg(not(windows))]
 use crate::desktop::APP_ID;
 
 /// Registers Serafind to start with the session, or removes the registration. Returns what
@@ -26,6 +28,7 @@ pub fn apply(with_session: bool) -> std::io::Result<Option<String>> {
 }
 
 /// `~/.config/autostart/<APP_ID>.desktop`.
+#[cfg(not(windows))]
 #[must_use]
 pub fn autostart_file() -> Option<PathBuf> {
     Some(
@@ -36,6 +39,7 @@ pub fn autostart_file() -> Option<PathBuf> {
 }
 
 /// Writes or removes the autostart file.
+#[cfg(not(windows))]
 fn apply_file(file: &Path, with_session: bool, executable: &Path) -> std::io::Result<Option<String>> {
     if !with_session {
         return match std::fs::remove_file(file) {
@@ -56,6 +60,7 @@ fn apply_file(file: &Path, with_session: bool, executable: &Path) -> std::io::Re
 }
 
 /// The autostart entry: runs `serafind start` when the session opens.
+#[cfg(not(windows))]
 fn autostart_entry(executable: &Path) -> String {
     let exec = executable
         .to_string_lossy()
@@ -114,7 +119,7 @@ mod windows {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(windows)))]
 mod tests {
     use super::*;
 

@@ -41,7 +41,13 @@ impl Instance {
             ),
         )
         .unwrap();
-        let socket = std::env::temp_dir().join(format!("sf-{name}-{}.sock", std::process::id()));
+        // A path on Unix; a pipe name (no folder) on Windows.
+        let socket_name = format!("sf-{name}-{}.sock", std::process::id());
+        let socket = if cfg!(windows) {
+            PathBuf::from(socket_name)
+        } else {
+            std::env::temp_dir().join(socket_name)
+        };
         let data_home = folder.path().join("share");
         Self {
             _folder: folder,
@@ -235,6 +241,8 @@ fn content_search_reads_the_files() {
     assert!(results.problem.unwrap().contains("not a valid expression"));
 }
 
+// On Windows this would write the Run registry value of the machine running the tests.
+#[cfg(unix)]
 #[test]
 fn start_with_the_session_is_applied_live() {
     let instance = Instance::new("session");
