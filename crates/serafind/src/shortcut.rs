@@ -283,9 +283,9 @@ mod hotkey {
             #[allow(unsafe_code)]
             unsafe {
                 let mut message: MSG = std::mem::zeroed();
-                while PeekMessageW(&mut message, std::ptr::null_mut(), 0, 0, PM_REMOVE) != 0 {
-                    TranslateMessage(&message);
-                    DispatchMessageW(&message);
+                while PeekMessageW(&raw mut message, std::ptr::null_mut(), 0, 0, PM_REMOVE) != 0 {
+                    TranslateMessage(&raw const message);
+                    DispatchMessageW(&raw const message);
                 }
             }
             std::thread::sleep(std::time::Duration::from_millis(15));
