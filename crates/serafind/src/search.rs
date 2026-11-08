@@ -479,7 +479,7 @@ mod tests {
     #[test]
     fn empty_line_searches_nothing() {
         let outcome = searcher(&["a.txt"]).run("   ", SearchMode::All, 10);
-        assert!(outcome.rows.is_empty());
+        assert_eq!(outcome.rows, []);
         assert!(!outcome.indexing);
     }
 
@@ -580,7 +580,7 @@ mod tests {
             folder.display().to_string().trim_end_matches(['/', '\\'])
         );
         let outside = found(&paths, &line, SearchMode::All, None);
-        assert!(names(&outside).is_empty());
+        assert_eq!(names(&outside), Vec::<&str>::new());
         assert!(outside.outside_index);
     }
 

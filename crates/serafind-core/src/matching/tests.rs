@@ -205,7 +205,7 @@ fn limit_keeps_the_best_and_counts_all() {
 #[test]
 fn zero_limit_returns_nothing() {
     let ranked = matcher("a", SearchMode::All).best([file("a")], 0);
-    assert!(ranked.entries.is_empty());
+    assert_eq!(ranked.entries, []);
     assert_eq!(ranked.total, 1);
 }
 

@@ -3,6 +3,7 @@ name = "serafind-index"
 description = "In-memory file index of Serafind: tree walking, filesystem watching."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true

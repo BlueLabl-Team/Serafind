@@ -1,0 +1,6 @@
+# The Rust used to build Serafind, on every machine and in the CI (rustup reads this file).
+# Bump it on purpose, with the CI workflows: a new Rust brings new Clippy lints.
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

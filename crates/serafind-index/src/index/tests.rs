@@ -176,7 +176,7 @@ fn renaming_out_of_the_roots_removes() {
         index.rename_path(Path::new("/home/me/a.txt"), Path::new("/tmp/a.txt")),
         None
     );
-    assert!(all(&index).is_empty());
+    assert_eq!(all(&index), Vec::<String>::new());
 }
 
 #[test]
@@ -221,7 +221,7 @@ fn start_folder_outside_the_index() {
     let index = index_of(&["report.txt"]);
     let results = index.search(&query("report in:/etc"), SearchMode::All, 10);
     assert!(results.outside_index);
-    assert!(results.hits.is_empty());
+    assert_eq!(results.hits.len(), 0, "{:?}", results.hits);
 }
 
 #[test]
@@ -233,12 +233,8 @@ fn roots_are_never_results() {
 #[test]
 fn apps_mode_finds_no_files() {
     let index = index_of(&["firefox.desktop"]);
-    assert!(
-        index
-            .search(&query("firefox"), SearchMode::Apps, 10)
-            .hits
-            .is_empty()
-    );
+    let hits = index.search(&query("firefox"), SearchMode::Apps, 10).hits;
+    assert_eq!(hits.len(), 0, "{hits:?}");
 }
 
 #[test]

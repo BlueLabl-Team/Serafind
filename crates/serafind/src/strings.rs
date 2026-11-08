@@ -159,7 +159,7 @@ mod tests {
     #[test]
     fn every_mode_has_a_name() {
         for mode in SearchMode::ALL {
-            assert!(!Strings::ENGLISH.mode(mode).is_empty());
+            assert_ne!(Strings::ENGLISH.mode(mode), "");
         }
         assert_eq!(Strings::ENGLISH.mode(SearchMode::Content), "Content");
     }

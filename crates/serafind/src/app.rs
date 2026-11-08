@@ -474,7 +474,7 @@ mod tests {
         for _ in 0..3 {
             let mut events = vec![preedit("")];
             filter.filter(&mut events);
-            assert!(events.is_empty());
+            assert_eq!(events.len(), 0, "{events:?}");
         }
     }
 

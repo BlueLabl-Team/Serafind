@@ -10,6 +10,9 @@ use std::sync::Arc;
 
 use crate::{Request, Response};
 
+/// Longest message read, in bytes: far more than any request or answer.
+const MAX_MESSAGE: u64 = 4 * 1024 * 1024;
+
 /// Environment variable that replaces the socket location (tests, several instances).
 pub const SOCKET_VARIABLE: &str = "SERAFIND_SOCKET";
 
@@ -55,8 +58,27 @@ fn socket_name(location: &str) -> io::Result<Name<'static>> {
 
 #[cfg(unix)]
 fn create_private_folder(folder: &std::path::Path) -> io::Result<()> {
-    use std::os::unix::fs::DirBuilderExt;
-    if folder.is_dir() {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+    if let Ok(metadata) = std::fs::symlink_metadata(folder) {
+        // The fallback folder in the shared temp folder (no private runtime folder): another
+        // user could have created it first.
+        let fallback = folder.parent() == Some(std::env::temp_dir().as_path())
+            && folder
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().starts_with("serafind-"));
+        if fallback
+            && (!metadata.is_dir()
+                || metadata.uid() != crate::peer::this_user()
+                || metadata.mode() & 0o077 != 0)
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "{} is not a private folder of this user: remove it, or set XDG_RUNTIME_DIR",
+                    folder.display()
+                ),
+            ));
+        }
         return Ok(());
     }
     std::fs::DirBuilder::new()
@@ -91,8 +113,15 @@ pub fn write_message(writer: &mut impl Write, message: &impl Serialize) -> io::R
 /// When the connection is broken or the line is not a valid message.
 pub fn read_message<T: DeserializeOwned>(reader: &mut impl BufRead) -> io::Result<Option<T>> {
     let mut line = String::new();
-    if reader.read_line(&mut line)? == 0 {
+    let length = reader.take(MAX_MESSAGE).read_line(&mut line)?;
+    if length == 0 {
         return Ok(None);
+    }
+    if !line.ends_with('\n') && u64::try_from(length).unwrap_or(u64::MAX) >= MAX_MESSAGE {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("a message is longer than {MAX_MESSAGE} bytes"),
+        ));
     }
     serde_json::from_str(line.trim_end())
         .map(Some)
@@ -130,8 +159,11 @@ impl Listener {
     ///
     /// # Errors
     /// When accepting fails.
+    /// Clients of another user are refused (`PermissionDenied`).
     pub fn accept(&self) -> io::Result<Connection> {
-        Ok(Connection::new(self.inner.accept()?))
+        let stream = self.inner.accept()?;
+        crate::peer::check_same_user(&stream)?;
+        Ok(Connection::new(stream))
     }
 }
 
@@ -214,6 +246,8 @@ impl Client {
     /// When nothing listens there.
     pub fn connect_to(location: &str) -> io::Result<Self> {
         let stream = LocalSocketStream::connect(socket_name(location)?)?;
+        // Another user may have taken the place first: never talk to it.
+        crate::peer::check_same_user(&stream)?;
         Ok(Self {
             connection: Connection::new(stream),
         })
@@ -315,5 +349,29 @@ mod tests {
 
     thread_local! {
         pub(super) static LOCATION_OVERRIDE: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_fallback_folder_that_is_not_private_is_refused() {
+        use std::os::unix::fs::PermissionsExt;
+        let folder = std::env::temp_dir().join(format!("serafind-shared-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::set_permissions(&folder, std::fs::Permissions::from_mode(0o777)).unwrap();
+        let location = folder.join("serafind.sock").to_string_lossy().into_owned();
+        let error = socket_name(&location).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+        std::fs::set_permissions(&folder, std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(socket_name(&location).is_ok(), "private: accepted");
+        std::fs::remove_dir_all(&folder).unwrap();
+    }
+
+    #[test]
+    fn too_long_messages_are_refused() {
+        let mut line = vec![b'x'; usize::try_from(MAX_MESSAGE).unwrap() + 10];
+        line.push(b'\n');
+        let error = read_message::<Request>(&mut line.as_slice()).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("longer than"));
     }
 }
