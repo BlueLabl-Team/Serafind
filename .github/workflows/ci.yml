@@ -36,6 +36,8 @@ jobs:
 
   windows:
     name: Windows (Clippy, tests)
+    # After Linux: an error common to both is reported (and fixed) once, on the faster system.
+    needs: linux
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
