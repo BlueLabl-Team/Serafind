@@ -39,6 +39,10 @@ global-hotkey.workspace = true
 windows-sys.workspace = true
 tray-icon.workspace = true
 
+# The system that builds (not the target): the resources are only compiled on Windows.
+[target.'cfg(windows)'.build-dependencies]
+winresource.workspace = true
+
 [dev-dependencies]
 serafind-ipc.workspace = true
 egui_kittest.workspace = true
