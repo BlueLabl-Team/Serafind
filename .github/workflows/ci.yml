@@ -14,6 +14,8 @@ concurrency:
 permissions:
   contents: read
 
+# Actions are pinned to a commit (the tag is in the comment): a tag can be moved by its owner.
+
 env:
   CARGO_TERM_COLOR: always
   # Line numbers are enough for failing tests; full debug info only slows the build down.
@@ -27,11 +29,12 @@ jobs:
     timeout-minutes: 30
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95.0
         with:
+          toolchain: 1.95.0
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           # Keep the compiled dependencies even when a check fails: the next run starts from them.
           cache-on-failure: true
@@ -53,10 +56,10 @@ jobs:
       # Rust's own linker: much faster than Microsoft's for the many test programs.
       CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER: rust-lld.exe
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       # A Dev Drive (ReFS, not scanned by the antivirus) for the sources, the toolchain and the
       # build: Windows spends much of a Rust build scanning the files it writes.
-      - uses: samypr100/setup-dev-drive@v3
+      - uses: samypr100/setup-dev-drive@cf663fdf88945e3faaa980ec525b5bc2350fbf9d # v3
         with:
           # The default (1 GB) is far too small for the build; the drive only grows as it fills.
           drive-size: 16GB
@@ -64,10 +67,11 @@ jobs:
           env-mapping: |
             CARGO_HOME,{{ DEV_DRIVE }}/.cargo
             RUSTUP_HOME,{{ DEV_DRIVE }}/.rustup
-      - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95.0
         with:
+          toolchain: 1.95.0
           components: clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           # v1: replaces a nearly empty cache saved by a run that failed early.
           prefix-key: v1-rust
@@ -85,5 +89,5 @@ jobs:
     name: Dependencies (advisories, licenses, sources)
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
