@@ -15,8 +15,7 @@ notify.workspace = true
 notify-debouncer-full.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-serde.workspace = true
-serde_json.workspace = true
+windows.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true
