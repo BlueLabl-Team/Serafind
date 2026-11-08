@@ -1,0 +1,54 @@
+; Windows installer of Serafind (Inno Setup 6).
+; Built by the release workflow:
+;   iscc /DVersion=0.1.0 /DSource=<folder of serafind.exe> /DOutput=<folder> packaging\windows\serafind.iss
+; Installs for the current user only: no administrator rights needed.
+
+#ifndef Version
+  #define Version "0.0.0"
+#endif
+#ifndef Source
+  #define Source "..\..\target\dist"
+#endif
+#ifndef Output
+  #define Output "..\..\target\installer"
+#endif
+
+[Setup]
+AppId={{6B3C1F2E-5A7D-4E8B-9C21-3F5D8A6B7E40}
+AppName=Serafind
+AppVersion={#Version}
+AppPublisher=BlueLabL
+AppPublisherURL=https://github.com/BlueLabl-Team/Serafind
+DefaultDirName={localappdata}\Programs\Serafind
+DefaultGroupName=Serafind
+DisableProgramGroupPage=yes
+PrivilegesRequired=lowest
+OutputDir={#Output}
+OutputBaseFilename=serafind-{#Version}-windows-x86_64-setup
+SetupIconFile=..\..\crates\serafind\assets\logo\serafind.ico
+UninstallDisplayIcon={app}\serafind.exe
+LicenseFile=..\..\LICENSE
+Compression=lzma2
+SolidCompression=yes
+WizardStyle=modern
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+; Serafind may be running when it is updated.
+CloseApplications=yes
+
+[Files]
+Source: "{#Source}\serafind.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\crates\serafind\assets\logo\serafind.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
+Source: "..\..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+
+[Icons]
+; Opens the bar (and starts Serafind when it does not run).
+Name: "{userprograms}\Serafind"; Filename: "{app}\serafind.exe"; IconFilename: "{app}\serafind.ico"; Comment: "Search your files and applications"
+
+[Run]
+Filename: "{app}\serafind.exe"; Parameters: "start"; Description: "Start Serafind now"; Flags: postinstall nowait skipifsilent
+
+[UninstallRun]
+; Stops Serafind and removes its start with the session (the settings are kept).
+Filename: "{app}\serafind.exe"; Parameters: "uninstall"; RunOnceId: "SerafindUninstall"; Flags: runhidden waituntilterminated

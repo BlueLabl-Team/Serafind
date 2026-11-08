@@ -1,0 +1,119 @@
+# Builds a release when a tag v* is pushed on main: binaries, .deb, .rpm and the Windows
+# installer, then a draft GitHub Release with their SHA-256 sums, to review and publish.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Check the tag
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: The tag is on main and matches the version of Cargo.toml
+        id: version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          cargo_version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          if [ "$version" != "$cargo_version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match version $cargo_version of Cargo.toml"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag $GITHUB_REF_NAME is not on main"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  linux:
+    name: Linux packages
+    needs: check
+    runs-on: ubuntu-22.04
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deb,cargo-generate-rpm
+      - name: Build
+        run: cargo build --profile dist --locked -p serafind
+      - name: Archive
+        run: |
+          mkdir -p out "serafind-$VERSION"
+          cp target/dist/serafind README.md LICENSE "serafind-$VERSION/"
+          tar czf "out/serafind-$VERSION-linux-x86_64.tar.gz" "serafind-$VERSION"
+      - name: .deb
+        run: cargo deb -p serafind --profile dist --no-build --output "out/serafind_${VERSION}_amd64.deb"
+      - name: .rpm
+        run: cargo generate-rpm -p crates/serafind --profile dist --output "out/serafind-$VERSION-1.x86_64.rpm"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: linux
+          path: out/*
+
+  windows:
+    name: Windows packages
+    needs: check
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --profile dist --locked -p serafind
+      - name: Archive
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out, "serafind-$env:VERSION" | Out-Null
+          Copy-Item target/dist/serafind.exe, README.md, LICENSE "serafind-$env:VERSION/"
+          Compress-Archive "serafind-$env:VERSION" "out/serafind-$env:VERSION-windows-x86_64.zip"
+      - name: Installer
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\iscc.exe" "/DVersion=$env:VERSION" "/DSource=$PWD\target\dist" "/DOutput=$PWD\out" packaging\windows\serafind.iss
+      - uses: actions/upload-artifact@v5
+        with:
+          name: windows
+          path: out/*
+
+  release:
+    name: Draft release
+    needs: [check, linux, windows]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          path: out
+          merge-multiple: true
+      - name: SHA-256 sums
+        working-directory: out
+        run: sha256sum * > SHA256SUMS.txt
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" out/* \
+            --draft \
+            --title "Serafind ${{ needs.check.outputs.version }}" \
+            --generate-notes

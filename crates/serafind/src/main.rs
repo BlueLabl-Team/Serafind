@@ -3,6 +3,10 @@
 //! `serafind` starts the resident process in the background, or opens / closes the bar when it
 //! already runs. The resident process starts the bar process (`serafind bar`) when needed.
 
+// Windows: a graphical program, so that no console window opens with it (at login, from the
+// Start menu). From a terminal, it attaches to the terminal's console to print.
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 mod actions;
 mod app;
 mod app_icon;
@@ -68,6 +72,8 @@ enum Command {
 }
 
 fn main() -> ExitCode {
+    #[cfg(windows)]
+    attach_to_console();
     let mut command = Command::Start;
     let mut settings_dir = serafind_settings::default_dir();
     let mut arguments = std::env::args().skip(1);
@@ -362,6 +368,30 @@ fn detach(command: &mut std::process::Command) {
     const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
+    stop_sharing_standard_streams();
+}
+
+/// Windows passes every inheritable handle of this process to the processes it starts: the
+/// resident process would keep the pipes of this command's own output open as long as it runs,
+/// and a program reading that output (a script, a test) would wait forever for its end. Unix
+/// closes them on its own.
+#[cfg(windows)]
+fn stop_sharing_standard_streams() {
+    use windows_sys::Win32::Foundation::{HANDLE_FLAG_INHERIT, SetHandleInformation};
+    use windows_sys::Win32::System::Console::{
+        GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+    };
+    for stream in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+        // SAFETY: only clears the inherit flag of this process's own standard handles; an
+        // invalid or missing handle makes the call fail harmlessly.
+        #[allow(unsafe_code)]
+        unsafe {
+            let handle = GetStdHandle(stream);
+            if !handle.is_null() {
+                SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0);
+            }
+        }
+    }
 }
 
 #[cfg(not(any(unix, windows)))]
@@ -478,5 +508,17 @@ fn window_icon() -> egui::IconData {
         rgba: logo.rgba,
         width: logo.width,
         height: logo.height,
+    }
+}
+
+/// Prints into the console of the terminal Serafind was started from, if any (Windows: the
+/// program has no console of its own).
+#[cfg(windows)]
+fn attach_to_console() {
+    use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
+    // SAFETY: attaches this process to its parent's console; fails harmlessly when there is none.
+    #[allow(unsafe_code)]
+    unsafe {
+        AttachConsole(ATTACH_PARENT_PROCESS);
     }
 }

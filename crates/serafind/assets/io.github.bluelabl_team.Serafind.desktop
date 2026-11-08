@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Serafind
+GenericName=Search
+Comment=Search your files and applications
+Exec=serafind toggle
+Icon=io.github.bluelabl_team.Serafind
+Terminal=false
+Categories=Utility;
+Keywords=search;find;files;launcher;
+StartupNotify=false

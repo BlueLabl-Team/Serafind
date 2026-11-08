@@ -244,9 +244,12 @@ fn unknown_filters_are_searched_as_words() {
 
 #[test]
 fn full_line_snapshot() {
-    insta::assert_debug_snapshot!(parse_line(
-        r#"invoice ext:pdf,docx in:~/Documents -draft c:"total due" a: unknown:x"#
-    ));
+    let mut query = parse_line(r#"invoice ext:pdf,docx in:~/Documents -draft c:"total due" a: unknown:x"#);
+    // The same snapshot on every system: Windows writes the folder with \.
+    query.start_folder = query
+        .start_folder
+        .map(|folder| PathBuf::from(folder.to_string_lossy().replace('\\', "/")));
+    insta::assert_debug_snapshot!(query);
 }
 
 // --- Properties ---

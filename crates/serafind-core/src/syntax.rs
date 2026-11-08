@@ -487,12 +487,14 @@ fn normalize_lexically(path: &Path) -> PathBuf {
 }
 
 /// `/home/me/Documents` → `~/Documents`.
+/// A folder for display: `~/Documents`, with `/` between folders on every system.
 fn shorten_home(path: &Path, home: &Path) -> String {
-    match path.strip_prefix(home) {
+    let shown = match path.strip_prefix(home) {
         Ok(rest) if rest.as_os_str().is_empty() => "~".to_owned(),
         Ok(rest) => format!("~/{}", rest.display()),
         Err(_) => path.display().to_string(),
-    }
+    };
+    shown.replace('\\', "/")
 }
 
 #[cfg(test)]

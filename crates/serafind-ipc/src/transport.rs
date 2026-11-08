@@ -1,7 +1,6 @@
 //! The local socket and its framing: one JSON message per line.
 
 use std::io::{self, BufRead, BufReader, Read, Write};
-use std::path::PathBuf;
 
 use interprocess::local_socket::prelude::*;
 use interprocess::local_socket::{ListenerOptions, Name};
@@ -47,7 +46,7 @@ fn default_location() -> String {
 #[cfg(unix)]
 fn socket_name(location: &str) -> io::Result<Name<'static>> {
     use interprocess::local_socket::GenericFilePath;
-    let path = PathBuf::from(location);
+    let path = std::path::PathBuf::from(location);
     if let Some(folder) = path.parent() {
         create_private_folder(folder)?;
     }

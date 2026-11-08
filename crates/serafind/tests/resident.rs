@@ -1,8 +1,6 @@
 //! The real executable: start in the background, status, search through the protocol, quit.
 //! Each test uses its own socket and settings (indexing a temporary folder, not the home folder).
-#![cfg(unix)]
 
-use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::time::{Duration, Instant};
@@ -41,7 +39,13 @@ impl Instance {
             ),
         )
         .unwrap();
-        let socket = std::env::temp_dir().join(format!("sf-{name}-{}.sock", std::process::id()));
+        // A path on Unix; a pipe name (no folder) on Windows.
+        let socket_name = format!("sf-{name}-{}.sock", std::process::id());
+        let socket = if cfg!(windows) {
+            PathBuf::from(socket_name)
+        } else {
+            std::env::temp_dir().join(socket_name)
+        };
         let data_home = folder.path().join("share");
         Self {
             _folder: folder,
@@ -166,6 +170,7 @@ fn start_search_and_quit() {
 #[cfg(unix)]
 #[test]
 fn bad_requests_are_answered_with_an_error() {
+    use std::io::{BufRead, Write};
     let instance = Instance::new("bad");
     assert!(instance.run(&[]).status.success());
     let mut stream = std::os::unix::net::UnixStream::connect(&instance.socket).unwrap();
@@ -235,6 +240,8 @@ fn content_search_reads_the_files() {
     assert!(results.problem.unwrap().contains("not a valid expression"));
 }
 
+// On Windows this would write the Run registry value of the machine running the tests.
+#[cfg(unix)]
 #[test]
 fn start_with_the_session_is_applied_live() {
     let instance = Instance::new("session");
