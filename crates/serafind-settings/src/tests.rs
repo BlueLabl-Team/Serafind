@@ -14,7 +14,7 @@ fn folder_with(config: &str) -> TempDir {
 fn the_commented_file_gives_the_defaults() {
     let parsed: Config = toml::from_str(DEFAULT_CONFIG).unwrap();
     assert_eq!(parsed, Config::default());
-    assert!(Config::default().problems().is_empty());
+    assert_eq!(Config::default().problems(), Vec::<(&str, String)>::new());
 }
 
 #[test]

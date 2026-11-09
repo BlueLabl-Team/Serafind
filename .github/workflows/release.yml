@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+# Actions are pinned to a commit (the tag is in the comment), and so are the versions of the tools
+# installed during the build: a tag or a package can be replaced by its owner, and whatever runs
+# here ends up in the published files.
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -19,7 +23,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
       - name: The tag is on main and matches the version of Cargo.toml
@@ -44,24 +48,29 @@ jobs:
     env:
       VERSION: ${{ needs.check.outputs.version }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@1.95.0
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@v2
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master; the toolchain is set below
         with:
-          tool: cargo-deb,cargo-generate-rpm
+          toolchain: 1.99.1 # as in rust-toolchain.toml
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2
+        with:
+          tool: cargo-deb@3.8.0,cargo-generate-rpm@0.21.1,cargo-about@0.9.3
       - name: Build
         run: cargo build --profile dist --locked -p serafind
+      # The licenses of the crates built in: their text must come with the program.
+      - name: Third-party licenses
+        run: cargo about generate --locked -o THIRD_PARTY_LICENSES.html about.hbs
       - name: Archive
         run: |
           mkdir -p out "serafind-$VERSION"
-          cp target/dist/serafind README.md LICENSE "serafind-$VERSION/"
+          cp target/dist/serafind README.md LICENSE THIRD_PARTY_LICENSES.html crates/serafind/assets/fonts/*-LICENSE.txt "serafind-$VERSION/"
           tar czf "out/serafind-$VERSION-linux-x86_64.tar.gz" "serafind-$VERSION"
       - name: .deb
         run: cargo deb -p serafind --profile dist --no-build --output "out/serafind_${VERSION}_amd64.deb"
       - name: .rpm
         run: cargo generate-rpm -p crates/serafind --profile dist --output "out/serafind-$VERSION-1.x86_64.rpm"
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: linux
           path: out/*
@@ -73,23 +82,32 @@ jobs:
     env:
       VERSION: ${{ needs.check.outputs.version }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@1.95.0
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master; the toolchain is set below
+        with:
+          toolchain: 1.99.1 # as in rust-toolchain.toml
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2
+        with:
+          tool: cargo-about@0.9.3
       - name: Build
         run: cargo build --profile dist --locked -p serafind
+      # The licenses of the crates built in: their text must come with the program.
+      - name: Third-party licenses
+        run: cargo about generate --locked -o THIRD_PARTY_LICENSES.html about.hbs
       - name: Archive
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force out, "serafind-$env:VERSION" | Out-Null
-          Copy-Item target/dist/serafind.exe, README.md, LICENSE "serafind-$env:VERSION/"
+          Copy-Item target/dist/serafind.exe, README.md, LICENSE, THIRD_PARTY_LICENSES.html "serafind-$env:VERSION/"
+          Copy-Item crates/serafind/assets/fonts/*-LICENSE.txt "serafind-$env:VERSION/"
           Compress-Archive "serafind-$env:VERSION" "out/serafind-$env:VERSION-windows-x86_64.zip"
       - name: Installer
         shell: pwsh
         run: |
-          choco install innosetup --no-progress -y
+          choco install innosetup --version 6.7.1 --no-progress -y
           & "${env:ProgramFiles(x86)}\Inno Setup 6\iscc.exe" "/DVersion=$env:VERSION" "/DSource=$PWD\target\dist" "/DOutput=$PWD\out" packaging\windows\serafind.iss
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: windows
           path: out/*
@@ -100,15 +118,25 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       contents: write
+      # Build provenance attestations (public repositories only on GitHub's plans).
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           path: out
           merge-multiple: true
       - name: SHA-256 sums
         working-directory: out
         run: sha256sum * > SHA256SUMS.txt
+      # Signed proof that these files were built by this workflow from this commit:
+      # gh attestation verify <file> --repo BlueLabl-Team/Serafind
+      - name: Provenance attestations
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: out/serafind*
       - name: Draft release
         env:
           GH_TOKEN: ${{ github.token }}

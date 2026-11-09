@@ -141,7 +141,7 @@ fn a_click_selects_and_a_double_click_opens() {
     harness.get_by_label(&second.name).click();
     harness.run();
     assert_eq!(harness.state().selected(), 1);
-    assert!(harness.state_mut().take_requests().is_empty());
+    assert_eq!(harness.state_mut().take_requests(), []);
     // The harness moves time by a quarter of a second per frame: allow slower double clicks.
     harness
         .ctx
@@ -299,7 +299,7 @@ fn escape_can_clear_first() {
     type_text(&mut harness, "fact");
     press(&mut harness, Modifiers::NONE, Key::Escape);
     assert_eq!(harness.state().line(), "");
-    assert!(harness.state_mut().take_requests().is_empty());
+    assert_eq!(harness.state_mut().take_requests(), []);
     press(&mut harness, Modifiers::NONE, Key::Escape);
     assert_eq!(harness.state_mut().take_requests(), [Request::Close]);
 }

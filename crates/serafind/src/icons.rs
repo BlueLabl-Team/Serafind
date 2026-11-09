@@ -107,8 +107,8 @@ impl Family {
     }
 }
 
-/// The color of a family's icon: the theme's own color for it when set, otherwise as in
-/// PowerHive (folders in `accent`, everything else in `text_secondary`).
+/// The color of a family's icon: the theme's own color for it when set, otherwise folders in
+/// `accent` and everything else in `text_secondary`.
 #[must_use]
 pub fn color_of(family: Family, theme: &Theme) -> Color {
     let colors = &theme.icons.colors;
@@ -154,7 +154,7 @@ mod tests {
     }
 
     #[test]
-    fn colors_as_in_powerhive_unless_set() {
+    fn default_colors_unless_set() {
         let mut theme = Theme::built_in("dark").unwrap();
         assert_eq!(color_of(Family::Folder, &theme), theme.colors.accent);
         assert_eq!(color_of(Family::Pdf, &theme), theme.colors.text_secondary);

@@ -69,42 +69,25 @@ fn shortcuts(root: &Path, folder: &Path, apps: &mut Vec<App>) {
     }
 }
 
-#[derive(serde::Deserialize)]
-struct StartApp {
-    #[serde(rename = "Name")]
-    name: String,
-    #[serde(rename = "AppID")]
-    app_id: String,
-}
-
-/// Store (UWP) apps, from `Get-StartApps`: their id has a `!`. Started through
-/// `shell:AppsFolder`.
+/// Store (UWP) apps: the items of the Start menu's own list (the `shell:AppsFolder` virtual
+/// folder) whose id has a `!`. Started through `shell:AppsFolder\<id>`. Read through the Shell
+/// API, without starting any program.
 fn store_apps() -> Vec<App> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let output = std::process::Command::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "Get-StartApps | ConvertTo-Json -Compress",
-        ])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output();
-    let Ok(output) = output else {
-        return Vec::new();
+    let items = match apps_folder::items() {
+        Ok(items) => items,
+        Err(error) => {
+            eprintln!("serafind: cannot list the Store apps: {error}");
+            return Vec::new();
+        }
     };
-    let text = String::from_utf8_lossy(&output.stdout);
-    let list: Vec<StartApp> = serde_json::from_str::<Vec<StartApp>>(&text)
-        .or_else(|_| serde_json::from_str::<StartApp>(&text).map(|app| vec![app]))
-        .unwrap_or_default();
-    list.into_iter()
-        .filter(|app| app.app_id.contains('!'))
-        .map(|app| {
-            let target = PathBuf::from(format!(r"shell:AppsFolder\{}", app.app_id));
+    items
+        .into_iter()
+        .filter(|(_, id)| id.contains('!'))
+        .map(|(name, id)| {
+            let target = PathBuf::from(format!(r"shell:AppsFolder\{id}"));
             App {
-                id: app.app_id,
-                name: app.name,
+                id,
+                name,
                 source: target.clone(),
                 executable: None,
                 icon: None,
@@ -112,4 +95,64 @@ fn store_apps() -> Vec<App> {
             }
         })
         .collect()
+}
+
+/// The `shell:AppsFolder` virtual folder, through COM.
+mod apps_folder {
+    use windows::Win32::System::Com::{
+        COINIT_APARTMENTTHREADED, CoInitializeEx, CoTaskMemFree, CoUninitialize,
+    };
+    use windows::Win32::UI::Shell::{
+        BHID_EnumItems, FOLDERID_AppsFolder, IEnumShellItems, IShellItem, KF_FLAG_DEFAULT,
+        SHGetKnownFolderItem, SIGDN, SIGDN_NORMALDISPLAY, SIGDN_PARENTRELATIVEPARSING,
+    };
+    use windows::core::Result;
+
+    /// The name shown and the id (`AppUserModelID`) of every item.
+    pub fn items() -> Result<Vec<(String, String)>> {
+        // SAFETY: COM is set up on this thread for the time of the call and released after
+        // (only when this call set it up); the interfaces are reference counted by the windows
+        // crate; each string the Shell allocates is copied, then freed with CoTaskMemFree.
+        #[allow(unsafe_code)]
+        unsafe {
+            let set_up = CoInitializeEx(None, COINIT_APARTMENTTHREADED).is_ok();
+            let result = (|| {
+                let folder: IShellItem = SHGetKnownFolderItem(&FOLDERID_AppsFolder, KF_FLAG_DEFAULT, None)?;
+                let list: IEnumShellItems = folder.BindToHandler(None, &BHID_EnumItems)?;
+                let mut items = Vec::new();
+                loop {
+                    let mut next = [None];
+                    let mut fetched = 0u32;
+                    list.Next(&mut next, Some(&raw mut fetched))?;
+                    let Some(item) = next[0].take().filter(|_| fetched == 1) else {
+                        break;
+                    };
+                    let (Ok(name), Ok(id)) = (
+                        text(&item, SIGDN_NORMALDISPLAY),
+                        text(&item, SIGDN_PARENTRELATIVEPARSING),
+                    ) else {
+                        continue;
+                    };
+                    items.push((name, id));
+                }
+                Ok(items)
+            })();
+            if set_up {
+                CoUninitialize();
+            }
+            result
+        }
+    }
+
+    /// A display name of an item, as a Rust string.
+    #[allow(unsafe_code)]
+    unsafe fn text(item: &IShellItem, kind: SIGDN) -> Result<String> {
+        // SAFETY: the Shell returns a string it allocated: read it, then free it.
+        unsafe {
+            let raw = item.GetDisplayName(kind)?;
+            let text = raw.to_string().unwrap_or_default();
+            CoTaskMemFree(Some(raw.0.cast_const().cast()));
+            Ok(text)
+        }
+    }
 }

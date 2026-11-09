@@ -20,6 +20,7 @@ mod format;
 mod icons;
 mod logo;
 mod priority;
+mod private_file;
 mod search;
 mod shortcut;
 mod strings;
@@ -72,8 +73,15 @@ enum Command {
 }
 
 fn main() -> ExitCode {
+    // Commands typed in a terminal print there. The resident process and the bar stay apart
+    // from any console: attached, closing the terminal would stop them.
     #[cfg(windows)]
-    attach_to_console();
+    if !std::env::args()
+        .skip(1)
+        .any(|argument| argument == "daemon" || argument == "bar")
+    {
+        attach_to_console();
+    }
     let mut command = Command::Start;
     let mut settings_dir = serafind_settings::default_dir();
     let mut arguments = std::env::args().skip(1);
@@ -295,10 +303,7 @@ fn start_in_background(settings_dir: Option<&Path>, show: bool) -> ExitCode {
         command
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null());
-        match log_path
-            .as_ref()
-            .and_then(|path| std::fs::File::create(path).ok())
-        {
+        match log_path.as_ref().and_then(|path| private_file::create(path).ok()) {
             Some(log) => command.stderr(log),
             None => command.stderr(std::process::Stdio::null()),
         };
@@ -364,10 +369,10 @@ fn detach(command: &mut std::process::Command) {
 #[cfg(windows)]
 fn detach(command: &mut std::process::Command) {
     use std::os::windows::process::CommandExt;
-    const DETACHED_PROCESS: u32 = 0x0000_0008;
+    // A graphical program has no console: it only needs its own process group, so that
+    // Ctrl+C in the terminal does not reach it.
     const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
+    command.creation_flags(CREATE_NEW_PROCESS_GROUP);
     stop_sharing_standard_streams();
 }
 

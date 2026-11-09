@@ -3,6 +3,7 @@ name = "serafind-settings"
 description = "Serafind settings and themes: TOML files, defaults, validation and live reload."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true

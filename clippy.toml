@@ -1,2 +1,2 @@
 # Names that are words in our docs, not code.
-doc-valid-idents = ["PowerHive", "BlueLabL", ".."]
+doc-valid-idents = ["BlueLabL", ".."]

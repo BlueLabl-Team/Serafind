@@ -40,7 +40,7 @@ fn empty_line_asks_for_nothing() {
     for line in ["", "   ", "\t "] {
         let query = parse_line(line);
         assert!(query.is_empty());
-        assert!(query.parts.is_empty());
+        assert_eq!(query.parts, []);
     }
 }
 
@@ -161,7 +161,7 @@ fn regular_expressions_for_the_content() {
     assert_eq!(query.mode, Some(Content));
     assert_eq!(query.content_patterns, strings(&["fix(me)?"]));
     assert_eq!(query.excluded_content_patterns, strings(&["wip\\d"]));
-    assert!(query.content.is_empty());
+    assert_eq!(query.content, Vec::<String>::new());
     assert!(!query.has_errors());
     assert_eq!(parse_line("re:").parts[0].error, Some(PartError::MissingContent));
 }
@@ -190,7 +190,7 @@ fn modes_cannot_be_excluded(#[case] line: &str) {
     let query = parse_line(line);
     assert_eq!(errors(&query), [Some(PartError::ExcludedMode)]);
     assert_eq!(query.mode, None);
-    assert!(query.words.is_empty());
+    assert_eq!(query.words, Vec::<String>::new());
 }
 
 #[test]
@@ -211,7 +211,7 @@ fn last_mode_wins() {
 fn replaced_content_filter_gives_no_text() {
     let query = parse_line("c:TODO d:");
     assert_eq!(query.mode, Some(Folders));
-    assert!(query.content.is_empty());
+    assert_eq!(query.content, Vec::<String>::new());
 }
 
 #[test]

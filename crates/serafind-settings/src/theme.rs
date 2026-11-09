@@ -95,7 +95,7 @@ macro_rules! section {
 }
 
 section! {
-    /// `[colors]`: the color roles of PowerHive, so that themes look alike in both applications.
+    /// `[colors]`: the color roles of the bar.
     Colors / PartialColors {
         /// Main brand color.
         primary: Color,
@@ -156,7 +156,7 @@ section! {
     }
 }
 
-/// `[icons.colors]`: optional color per kind of entry. By default (as in PowerHive) icons use
+/// `[icons.colors]`: optional color per kind of entry. By default icons use
 /// `text_secondary` and folders `accent`.
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -378,7 +378,7 @@ mod tests {
     fn built_in_themes_are_complete() {
         for (name, _) in BUILT_IN {
             let theme = Theme::built_in(name).unwrap();
-            assert!(!theme.name.is_empty());
+            assert_ne!(theme.name, "");
         }
         assert!(Theme::built_in("nope").is_none());
     }

@@ -57,6 +57,77 @@ pub struct ContentSettings {
     pub max_file_size: u32,
     /// The search starts after this pause in typing, in milliseconds.
     pub typing_delay: u32,
+    /// Files never read, by name (`*` stands for any characters): histories, passwords, keys...
+    /// so that their lines do not appear in the bar.
+    pub exclude_names: Vec<String>,
+}
+
+/// Files that hold secrets: never read by the Content mode.
+const SECRET_FILES: &[&str] = &[
+    ".bash_history",
+    ".zsh_history",
+    ".histfile",
+    ".sh_history",
+    ".python_history",
+    ".node_repl_history",
+    ".psql_history",
+    ".mysql_history",
+    ".sqlite_history",
+    ".rediscli_history",
+    ".lesshst",
+    ".viminfo",
+    ".netrc",
+    ".git-credentials",
+    ".pgpass",
+    ".my.cnf",
+    ".npmrc",
+    ".pypirc",
+    ".Xauthority",
+    ".ICEauthority",
+    ".env",
+    ".env.*",
+    "*.pem",
+    "*.key",
+    "*.p12",
+    "*.pfx",
+    "*.kdbx",
+    "id_rsa",
+    "id_dsa",
+    "id_ecdsa",
+    "id_ed25519",
+];
+
+impl ContentSettings {
+    /// True when the Content mode must not read a file of this name.
+    #[must_use]
+    pub fn excludes(&self, name: &str) -> bool {
+        self.exclude_names
+            .iter()
+            .any(|pattern| matches_name(pattern, name))
+    }
+}
+
+/// `pattern` with `*` standing for any characters, compared with `name` ignoring case.
+fn matches_name(pattern: &str, name: &str) -> bool {
+    let pattern = pattern.to_lowercase();
+    let name = name.to_lowercase();
+    let mut pieces = pattern.split('*');
+    let first = pieces.next().unwrap_or_default();
+    let Some(mut rest) = name.strip_prefix(first) else {
+        return false;
+    };
+    let pieces: Vec<&str> = pieces.collect();
+    let Some((last, middle)) = pieces.split_last() else {
+        // No `*`: the whole name.
+        return rest.is_empty();
+    };
+    for piece in middle {
+        match rest.find(piece) {
+            Some(at) => rest = &rest[at + piece.len()..],
+            None => return false,
+        }
+    }
+    rest.ends_with(last)
 }
 
 impl Default for ContentSettings {
@@ -64,6 +135,7 @@ impl Default for ContentSettings {
         Self {
             max_file_size: 10,
             typing_delay: 250,
+            exclude_names: SECRET_FILES.iter().map(|&name| name.to_owned()).collect(),
         }
     }
 }
@@ -600,5 +672,43 @@ fn key_setting(name: &str) -> &'static str {
         "complete" => "keys.complete",
         "mode_with_digit" => "keys.mode_with_digit",
         _ => "keys.open_with_digit",
+    }
+}
+
+#[cfg(test)]
+mod content_tests {
+    use super::*;
+
+    #[rstest::rstest]
+    #[case(".zsh_history", ".zsh_history", true)]
+    #[case(".ZSH_HISTORY", ".zsh_history", true)]
+    #[case(".zsh_history", ".zsh_history.bak", false)]
+    #[case("*.pem", "server.pem", true)]
+    #[case("*.pem", "server.pem.txt", false)]
+    #[case(".env.*", ".env.local", true)]
+    #[case(".env.*", ".env", false)]
+    #[case("id_*", "id_rsa", true)]
+    #[case("a*b*c", "aXXbYYc", true)]
+    #[case("a*b*c", "aXXcYYb", false)]
+    fn name_patterns(#[case] pattern: &str, #[case] name: &str, #[case] expected: bool) {
+        assert_eq!(matches_name(pattern, name), expected, "{pattern} / {name}");
+    }
+
+    #[test]
+    fn secrets_are_left_out_by_default() {
+        let content = ContentSettings::default();
+        for name in [
+            ".bash_history",
+            ".netrc",
+            ".git-credentials",
+            "id_ed25519",
+            "cert.key",
+            ".env",
+        ] {
+            assert!(content.excludes(name), "{name}");
+        }
+        for name in ["notes.txt", "main.rs", "environment.md", "keys.md"] {
+            assert!(!content.excludes(name), "{name}");
+        }
     }
 }
