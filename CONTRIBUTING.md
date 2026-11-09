@@ -52,6 +52,20 @@ git switch main && git pull
 git tag vX.Y.Z && git push origin vX.Y.Z   # the version of Cargo.toml
 ```
 
+## Fedora package (COPR)
+
+The Fedora package (`packaging/fedora/serafind.spec`) repackages the program of the GitHub release:
+Fedora's Rust is older than the one Serafind needs. COPR makes its source package with
+`.copr/Makefile` (the version comes from `Cargo.toml`), and `.github/workflows/copr.yml` starts a
+build when a release is published, through the COPR webhook stored in the `COPR_WEBHOOK` secret.
+
+To try it in a container:
+
+```bash
+podman run --rm -v "$PWD":/src:ro,Z -w /src registry.fedoraproject.org/fedora:42 bash -c \
+  'dnf -y install make git-core && make -f .copr/Makefile srpm outdir=/tmp/out && rpmbuild --rebuild /tmp/out/*.src.rpm'
+```
+
 ## Project layout
 
 See [docs/architecture.md](docs/architecture.md): the crates, the libraries used and how the resident process and the bar work together.
