@@ -78,7 +78,7 @@ Run `serafind uninstall` first (it stops Serafind and removes its start with the
 
 - [Features in detail](docs/features.md): search syntax, every action, applications, text search, shortcut, tray icon, all the settings.
 - [How it works](docs/architecture.md), and the [roadmap](docs/roadmap.md).
-- [Contributing](CONTRIBUTING.md) and [security](SECURITY.md).
+- [Contributing](CONTRIBUTING.md), [security](SECURITY.md) and the [code signing policy](docs/code-signing-policy.md).
 
 ## License
 
