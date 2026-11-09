@@ -59,7 +59,7 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       # A Dev Drive (ReFS, not scanned by the antivirus) for the sources, the toolchain and the
       # build: Windows spends much of a Rust build scanning the files it writes.
-      - uses: samypr100/setup-dev-drive@cf663fdf88945e3faaa980ec525b5bc2350fbf9d # v3
+      - uses: samypr100/setup-dev-drive@562171fe8df7401fdf582d766cd3b6ab80d5b1a0 # v4.1.0
         with:
           # The default (1 GB) is far too small for the build; the drive only grows as it fills.
           drive-size: 16GB
