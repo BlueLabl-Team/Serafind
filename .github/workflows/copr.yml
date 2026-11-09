@@ -1,0 +1,26 @@
+# Rebuilds the Fedora package on COPR when a release is published: the package takes the
+# program from the release files, which only exist once the release is published.
+name: COPR
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+jobs:
+  rebuild:
+    name: Rebuild on COPR
+    runs-on: ubuntu-22.04
+    steps:
+      # The webhook URL (COPR → project settings → Integrations → Custom webhook, with
+      # "/serafind/" at the end) is a secret: anyone who has it can start builds.
+      - name: Call the COPR webhook
+        env:
+          COPR_WEBHOOK: ${{ secrets.COPR_WEBHOOK }}
+        run: |
+          if [ -z "$COPR_WEBHOOK" ]; then
+            echo "::notice::No COPR_WEBHOOK secret: the package is not rebuilt."
+            exit 0
+          fi
+          curl --fail --silent --show-error -X POST "$COPR_WEBHOOK"
