@@ -10,10 +10,11 @@ Serafind is a quick search bar for Linux and Windows. Press **Super+F** anywhere
 
 ## Install
 
-Download the file for your system from the [latest release](https://github.com/BlueLabl-Team/Serafind/releases/latest).
+On Fedora, the simplest is the COPR repository (first line below). Otherwise, download the file for your system from the [latest release](https://github.com/BlueLabl-Team/Serafind/releases/latest).
 
 | System | File | How |
 |---|---|---|
+| Fedora 43 and later | [COPR repository](https://copr.fedorainfracloud.org/coprs/archeopsy/Serafind/) | `sudo dnf copr enable archeopsy/Serafind`, then `sudo dnf install serafind`: updates come with the system's |
 | Ubuntu, Debian | `serafind_X.Y.Z_amd64.deb` | `sudo apt install ./serafind_X.Y.Z_amd64.deb` |
 | Fedora, openSUSE | `serafind-X.Y.Z-1.x86_64.rpm` | `sudo dnf install ./serafind-X.Y.Z-1.x86_64.rpm` |
 | Other Linux | `serafind-X.Y.Z-linux-x86_64.tar.gz` | Extract it and put `serafind` in a folder of your `PATH` (e.g. `~/.local/bin`) |
